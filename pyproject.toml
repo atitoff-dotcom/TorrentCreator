@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "torrentcreator"
+version = "1.0.0"
+description = "TorrentCreator - Modern Desktop Release Maker for RuTracker and Kinozal"
+requires-python = ">=3.10"
+dependencies = [
+    "pywebview>=6.0.0",
+    "nodriver>=0.50.0",
+    "requests>=2.30.0",
+    "pillow>=10.0.0",
+    "pymediainfo>=7.0.0",
+    "torf>=4.0.0",
+    "mss>=9.0.0",
+]
+
+[project.scripts]
+torrentcreator = "main:main"
+
+[tool.setuptools]
+py-modules = ["main"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["backend*", "frontend*", "assets*"]
+exclude = ["*.__pycache__*", "build*", "dist*"]
+namespaces = true
+
+[tool.setuptools.package-data]
+"*" = ["*.*", "**/*.*"]

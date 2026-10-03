@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TorrentCreator</title>
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="stylesheet" href="css/theme.css">
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+
+  <!-- Верхний Header с вкладками и переключателем тем -->
+  <header class="app-header">
+    <div class="brand">
+      <img src="logo.png" alt="TorrentCreator" style="width: 26px; height: 26px; object-fit: contain; margin-right: 8px; border-radius: 5px;">
+      <span>TorrentCreator</span>
+    </div>
+
+    <nav class="tabs-nav">
+      <button class="tab-btn active" data-tab="tab-media">
+        <span>🎬</span> 1. Медиа и Базы
+      </button>
+      <button class="tab-btn" data-tab="tab-screens">
+        <span>📸</span> 2. Скриншоты
+      </button>
+      <button class="tab-btn" data-tab="tab-release">
+        <span>📦</span> 3. Релиз и Трекеры
+      </button>
+      <button class="tab-btn" data-tab="tab-settings">
+        <span>⚙️</span> Настройки
+      </button>
+    </nav>
+
+    <div class="header-actions">
+      <!-- Переключатель светлая / темная тема -->
+      <button id="themeToggleBtn" class="icon-btn" title="Переключить тему (Светлая / Темная)">
+        <span id="themeIcon">🌙</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Основное содержимое вкладок -->
+  <main class="app-content">
+
+    <!-- Вкладка 1: Медиа и Метаданные -->
+    <section id="tab-media" class="tab-pane active">
+      <!-- Панель выбора файла / папки -->
+      <div class="file-select-bar">
+        <button id="selectFileBtn" class="btn btn-primary">
+          <span>📁</span> Выбрать видеофайл (.mkv)
+        </button>
+        <button id="selectFolderBtn" class="btn btn-secondary">
+          <span>📂</span> Выбрать папку (сериал)
+        </button>
+        <div id="selectedFilePathText" class="file-path-display">
+          Файл или папка еще не выбраны
+        </div>
+      </div>
+
+      <!-- Двухколоночный макет: Слева из файла, Справа из баз -->
+      <div class="split-layout">
+        <!-- Левая колонка: Файл / MediaInfo -->
+        <div class="card">
+          <div class="card-header">
+            <span>📄 Данные из видеофайла (MediaInfo)</span>
+            <span id="fileBadge" class="badge badge-blue">Файл не выбран</span>
+          </div>
+          <div class="card-body" id="mediaInfoContainer">
+            <div style="color: var(--text-muted); text-align: center; margin-top: 40px;">
+              Перетащите видеофайл для автоматического извлечения MediaInfo
+            </div>
+          </div>
+        </div>
+
+        <!-- Правая колонка: Данные релиза (всегда доступно для ввода и редактирования) -->
+        <div class="card">
+          <div class="card-header">
+            <span>🌐 Данные релиза</span>
+            <span id="metaSourceBadge" class="badge badge-green">Готово к вводу</span>
+          </div>
+          <div class="card-body" id="metaContainer" style="overflow-y: auto; max-height: calc(100vh - 215px);">
+            <!-- Строка быстрого поиска / вставки ссылки -->
+            <div style="margin-bottom: 8px; display: flex; gap: 8px;">
+              <input type="text" id="manualSearchInput" class="form-control" placeholder="Поиск по названию или ссылка (Kinopoisk / TMDb / IMDb)...">
+              <button id="manualSearchBtn" class="btn btn-secondary" style="white-space: nowrap;">🔍 Найти</button>
+            </div>
+
+            <!-- Список найденных совпадений онлайн-баз -->
+            <div id="searchResultsDropdown" style="display: none; margin-bottom: 12px; max-height: 220px; overflow-y: auto; background: var(--bg-hover); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 4px;"></div>
+
+            <!-- Форма всех полей релиза -->
+            <div id="releaseFormFields">
+              <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px; margin-bottom: 10px;">
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label class="form-label">Название (русское) *</label>
+                  <input type="text" id="metaTitleRu" class="form-control" placeholder="например: Интерстеллар">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label class="form-label">Год выпуска</label>
+                  <input type="text" id="metaYear" class="form-control" placeholder="2014">
+                </div>
+              </div>
+
+              <div class="form-group" style="margin-bottom: 10px;">
+                <label class="form-label">Оригинальное название</label>
+                <input type="text" id="metaTitleOrig" class="form-control" placeholder="например: Interstellar">
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label class="form-label">Страна</label>
+                  <input type="text" id="metaCountry" class="form-control" placeholder="США, Великобритания">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label class="form-label">Жанр (2-6 через запятую)</label>
+                  <input type="text" id="metaGenre" class="form-control" placeholder="Фантастика, драма, приключения">
+                </div>
+              </div>
+
+              <div class="form-group" style="margin-bottom: 10px;">
+                <label class="form-label">Режиссер</label>
+                <input type="text" id="metaDirector" class="form-control" placeholder="Кристофер Нолан">
+              </div>
+
+              <div class="form-group" style="margin-bottom: 10px;">
+                <label class="form-label">В ролях (или Исполнитель / Ведущий)</label>
+                <input type="text" id="metaCast" class="form-control" placeholder="Мэттью Макконахи, Энн Хэтэуэй...">
+              </div>
+
+              <div class="form-group" style="margin-bottom: 10px;">
+                <label class="form-label">Ссылка на постер</label>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                  <input type="text" id="metaPoster" class="form-control" placeholder="https://... постер.jpg">
+                  <img id="metaPosterThumb" src="" alt="Постер" style="width: 36px; height: 50px; object-fit: cover; border-radius: var(--radius-sm); border: 1px solid var(--border-color); display: none;">
+                </div>
+              </div>
+
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Описание сюжета</label>
+                <textarea id="metaPlot" class="form-control" rows="3" placeholder="Краткое описание фильма или передачи..."></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Вкладка 2: Скриншоты -->
+    <section id="tab-screens" class="tab-pane">
+      <div class="split-layout">
+        <!-- Левая колонка: Все нарезанные кадры -->
+        <div class="card">
+          <div class="card-header">
+            <span>🎞️ Нарезанные кадры из фильма</span>
+            <button id="addMoreScreensBtn" class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px;">+ Еще кадры</button>
+          </div>
+          <div class="card-body">
+            <div id="allScreensGrid" class="screens-grid">
+              <div style="grid-column: 1/-1; color: var(--text-muted); text-align: center; margin-top: 40px;">
+                Кадры будут автоматически нарезаны после выбора видео
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Правая колонка: Отобранные кадры для раздачи -->
+        <div class="card">
+          <div class="card-header">
+            <span>✅ Отобранные для релиза (<span id="selectedScreensCount">0</span>/4)</span>
+            <button id="uploadScreensBtn" class="btn btn-primary" style="padding: 4px 10px; font-size: 12px;">Залить на хостинг</button>
+          </div>
+          <div class="card-body">
+            <div id="selectedScreensGrid" class="screens-grid">
+              <div style="grid-column: 1/-1; color: var(--text-muted); text-align: center; margin-top: 40px;">
+                Кликните на кадр слева, чтобы добавить его в оформление раздачи
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Вкладка 3: Релиз и Трекеры -->
+    <section id="tab-release" class="tab-pane">
+      <div style="max-width: 650px; margin: 0 auto;">
+        <div class="card">
+          <div class="card-header">
+            <span>🚀 Параметры релиза и Публикация</span>
+          </div>
+          <div class="card-body">
+            <!-- Динамический блок редактирования аудиодорожек -->
+            <div class="form-group" style="margin-bottom: 20px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <label class="form-label" style="margin: 0; font-weight: 600;">🔊 Аудиодорожки релиза</label>
+                <span id="audioTracksBadge" class="badge" style="font-size: 11px; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); padding: 2px 8px; border-radius: 4px;">0 дорожек</span>
+              </div>
+              <div id="audioTracksContainer" style="display: flex; flex-direction: column; gap: 8px;">
+                <div style="font-size: 12px; color: var(--text-muted); padding: 12px; background: var(--bg-input); border-radius: var(--radius-sm); text-align: center;">
+                  Выберите видеофайл для автоматического определения аудиодорожек
+                </div>
+              </div>
+            </div>
+
+            <!-- Динамический блок редактирования субтитров -->
+            <div class="form-group" style="margin-bottom: 20px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <label class="form-label" style="margin: 0; font-weight: 600;">💬 Субтитры релиза</label>
+                <span id="subtitlesBadge" class="badge" style="font-size: 11px; background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); padding: 2px 8px; border-radius: 4px;">0 субтитров</span>
+              </div>
+              <div id="subtitlesContainer" style="display: flex; flex-direction: column; gap: 8px;">
+                <div style="font-size: 12px; color: var(--text-muted); padding: 12px; background: var(--bg-input); border-radius: var(--radius-sm); text-align: center;">
+                  Выберите видеофайл для автоматического определения субтитров
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Подраздел RuTracker</label>
+              <select id="rutrackerSubcategory" class="form-control">
+                <option value="foreign_hd">Зарубежное кино (HD Video)</option>
+                <option value="foreign_serial_hd">Зарубежные сериалы (HD Video)</option>
+                <option value="russian_hd">Наше кино (HD Video)</option>
+                <option value="russian_serial_hd">Русские сериалы (HD Video)</option>
+                <option value="animation_hd">Мультфильмы (HD Video)</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 20px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <label class="form-label" style="margin: 0; font-weight: 600;">📄 Инфо-файл MediaInfo</label>
+                <span id="infoFileStatus" style="font-size: 11px; color: var(--text-muted);">Загрузится автоматически</span>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <input type="text" id="infoFileUrl" class="form-control" placeholder="https://rentry.co/... (зальётся автоматически при публикации)" style="font-size: 12px; height: 34px;">
+                <button type="button" id="uploadInfoFileBtn" class="btn btn-secondary" style="white-space: nowrap; padding: 6px 14px; font-size: 12px; height: 34px;" title="Залить отчёт MediaInfo на Rentry прямо сейчас">
+                  Залить
+                </button>
+              </div>
+            </div>
+
+            <div style="margin-top: 24px; display: flex; flex-direction: column; gap: 12px;">
+              <button id="publishKinozalBtn" class="btn btn-primary" style="background: #e11d48; padding: 12px; font-size: 13.5px; font-weight: 600;">
+                <span>🌐</span> Открыть и заполнить Kinozal
+              </button>
+              <button id="publishRutrackerBtn" class="btn btn-primary" style="padding: 12px; font-size: 13.5px; font-weight: 600;">
+                <span>🌐</span> Открыть и заполнить RuTracker
+              </button>
+            </div>
+
+            <div style="margin-top: 16px; padding: 12px 16px; background: rgba(16, 185, 129, 0.08); border-radius: var(--radius-sm); border: 1px solid rgba(16, 185, 129, 0.3); font-size: 11.5px; color: var(--text-muted); line-height: 1.5; text-align: center;">
+              <span style="color: #10b981; font-weight: bold;">⚡ Полный автомат:</span> браузер открывается сам и заполняет все поля формы. Логин и проверки трекера сохраняются навсегда.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Вкладка 4: Настройки -->
+    <section id="tab-settings" class="tab-pane">
+      <div style="max-width: 600px; margin: 0 auto;" class="card">
+        <div class="card-header">
+          <span>⚙️ Настройки программы</span>
+        </div>
+        <div class="card-body">
+
+          <div class="form-group">
+            <label class="form-label">API-ключ TMDb (The Movie Database)</label>
+            <input type="password" id="settingTmdbKey" class="form-control" placeholder="API ключ TMDb...">
+            <div class="form-hint">
+              Получить бесплатно: зарегистрируйтесь на <a class="ext-link" data-url="https://www.themoviedb.org/signup">themoviedb.org</a> и создайте ключ в <a class="ext-link" data-url="https://www.themoviedb.org/settings/api">Настройках API</a>.
+            </div>
+            <button id="copyTmdbDescBtn" type="button" class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px; margin-top: 5px;">
+              📋 Скопировать безопасное описание для TMDb
+            </button>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">API-ключ Kinopoisk Unofficial</label>
+            <input type="password" id="settingKinopoiskKey" class="form-control" placeholder="Токен Kinopoisk API...">
+            <div class="form-hint">
+              Получить бесплатно: зарегистрируйтесь на <a class="ext-link" data-url="https://kinopoiskapiunofficial.tech/">kinopoiskapiunofficial.tech</a> (ключ выдается в кабинете)
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Фотохостинг скриншотов</label>
+            <select id="settingImageHost" class="form-control">
+              <option value="fastpic">Fastpic.org (рекомендован для RuTracker и Kinozal)</option>
+              <option value="postimages">Postimages.org</option>
+            </select>
+          </div>
+
+          <div style="margin-top: 20px; text-align: right;">
+            <button id="saveSettingsBtn" class="btn btn-primary">Сохранить настройки</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Нижний статусбар -->
+  <footer class="app-statusbar">
+    <div id="statusMessage">Готов к работе</div>
+    <div id="statusInfo">Python 3.14 + PyWebview</div>
+  </footer>
+
+  <!-- Глобальный оверлей блокировки и спиннера -->
+  <div id="globalLoader" class="loader-overlay">
+    <div class="loader-card">
+      <div class="loader-spinner"></div>
+      <div id="loaderText" class="loader-text">Выполняется операция...</div>
+      <div id="loaderSubtext" class="loader-subtext">Пожалуйста, подождите</div>
+    </div>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

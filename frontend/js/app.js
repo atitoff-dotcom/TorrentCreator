@@ -734,20 +734,3 @@ async function triggerFfmpegDownload(onCompleteCallback = null) {
     }, 600);
   }
 }
-
-  // Ручной поиск фильма/сериала
-  const searchBtn = document.getElementById('manualSearchBtn');
-  const searchInput = document.getElementById('manualSearchInput');
-  if (searchBtn && searchInput) {
-    const triggerSearch = () => {
-      const q = searchInput.value.trim();
-      if (q) {
-        searchMetadata(q);
-      }
-    };
-    searchBtn.addEventListener('click', triggerSearch);
-    searchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') triggerSearch();
-    });
-  }
-}

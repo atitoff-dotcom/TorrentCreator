@@ -340,6 +340,7 @@ async function searchMetadata(query, year) {
 
   // Если имя файла состоит только из цифр (номер файла/диска вроде 00034, 01) - не блокируем поиск
   if (/^\d{1,5}$/.test(cleanQ)) {
+    window.hideLoader();
     if (metaBadge) metaBadge.textContent = 'Ручной ввод';
     window.showStatus('Файл с цифровым именем. Введите название фильма вручную.', 'info');
     const titleInput = document.getElementById('metaTitleRu');
@@ -355,17 +356,17 @@ async function searchMetadata(query, year) {
   window.showLoader('Поиск в онлайн-базах...', `Кинопоиск и TMDb: "${cleanQ}"`);
 
   try {
-    // Ограничиваем ожидание поиска 6 секундами (защита от зависания сети)
-    const searchPromise = window.pywebview.api.search_metadata(cleanQ, year);
+    // Ограничиваем ожидание поиска 10 секундами (защита от зависания сети)
+    const searchPromise = window.pywebview.api.search_metadata(cleanQ, year || null);
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Таймаут ответа онлайн-баз')), 6000)
+      setTimeout(() => reject(new Error('Таймаут ответа онлайн-баз')), 10000)
     );
     const results = await Promise.race([searchPromise, timeoutPromise]);
 
     if (!results || results.length === 0) {
       if (metaBadge) metaBadge.textContent = 'Ручной ввод';
       if (dropdown) dropdown.style.display = 'none';
-      window.showStatus('Фильм не найден в онлайн-базах. Доступен ручной ввод.', 'info');
+      window.showStatus(`По запросу "${cleanQ}" ничего не найдено. Доступен ручной ввод.`, 'info');
       
       const titleInput = document.getElementById('metaTitleRu');
       if (titleInput && !titleInput.value) {
@@ -699,17 +700,21 @@ function checkFfmpegStartup(status) {
   }
 }
 
+window.onFfmpegDownloadProgress = function(percent, message) {
+  window.showLoader('Загрузка FFmpeg...', message, percent);
+  window.showStatus(message);
+};
+
 async function triggerFfmpegDownload(onCompleteCallback = null) {
   window.showLoader(
     'Загрузка FFmpeg...',
-    'Скачивание официальной статической сборки...',
-    15
+    'Подключение к серверу загрузки...',
+    3
   );
-  window.showStatus('Скачивание и настройка FFmpeg...');
+  window.showStatus('Подключение к серверу FFmpeg...');
 
   try {
     if (window.pywebview && window.pywebview.api && window.pywebview.api.download_ffmpeg) {
-      window.showLoader('Загрузка FFmpeg...', 'Распаковка и проверка бинарного файла...', 85);
       const res = await window.pywebview.api.download_ffmpeg();
       if (res && res.success) {
         window.showLoader('Загрузка FFmpeg...', 'Готово! FFmpeg успешно настроен', 100);
@@ -722,15 +727,19 @@ async function triggerFfmpegDownload(onCompleteCallback = null) {
             version: res.version
           });
         }
+        setTimeout(() => {
+          window.hideLoader();
+        }, 1200);
       } else {
-        window.showStatus('Ошибка скачивания FFmpeg: ' + (res.error || 'неизвестно'), 'error');
+        window.hideLoader();
+        const err = (res && res.error) ? res.error : 'Неизвестная ошибка';
+        window.showStatus(`Ошибка скачивания FFmpeg: ${err}`, 'error');
+        alert(`Не удалось скачать FFmpeg автоматически:\n\n${err}\n\nВы можете скачать его вручную и указать путь в Настройках программы.`);
       }
     }
   } catch (e) {
+    window.hideLoader();
     window.showStatus('Ошибка загрузки: ' + e, 'error');
-  } finally {
-    setTimeout(() => {
-      window.hideLoader();
-    }, 600);
+    alert(`Ошибка загрузки FFmpeg: ${e}`);
   }
 }

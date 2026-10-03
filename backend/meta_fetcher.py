@@ -1,7 +1,7 @@
 import re
 import urllib.parse
 import requests
-from backend.config_manager import load_config
+from backend.config_manager import load_config, DEFAULT_KP_KEY, DEFAULT_TMDB_KEY
 
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500"
@@ -53,7 +53,7 @@ class MetaFetcher:
 
     # --- TMDb Интеграция ---
     def search_tmdb(self, query: str, year: str = None) -> list:
-        api_key = self.config.get("tmdb_api_key")
+        api_key = self.config.get("tmdb_api_key") or DEFAULT_TMDB_KEY
         if not api_key or not query or (query.isdigit() and len(query) <= 5):
             return []
 
@@ -99,7 +99,7 @@ class MetaFetcher:
         return []
 
     def get_tmdb_details(self, tmdb_id: int, is_series: bool = False) -> dict:
-        api_key = self.config.get("tmdb_api_key")
+        api_key = self.config.get("tmdb_api_key") or DEFAULT_TMDB_KEY
         if not api_key:
             return {}
 
@@ -191,7 +191,7 @@ class MetaFetcher:
 
     def find_kinopoisk_by_imdb(self, imdb_id: str) -> dict:
         """Ищет фильм в Кинопоиске по IMDb ID для связки ID"""
-        api_key = self.config.get("kinopoisk_api_key")
+        api_key = self.config.get("kinopoisk_api_key") or DEFAULT_KP_KEY
         if not api_key or not imdb_id:
             return {}
 
@@ -217,7 +217,7 @@ class MetaFetcher:
 
     # --- Кинопоиск Unofficial API Интеграция ---
     def search_kinopoisk(self, query: str) -> list:
-        api_key = self.config.get("kinopoisk_api_key")
+        api_key = self.config.get("kinopoisk_api_key") or DEFAULT_KP_KEY
         if not api_key or not query or (query.isdigit() and len(query) <= 5):
             return []
 
@@ -281,7 +281,7 @@ class MetaFetcher:
         return []
 
     def get_kinopoisk_details(self, film_id: int) -> dict:
-        api_key = self.config.get("kinopoisk_api_key")
+        api_key = self.config.get("kinopoisk_api_key") or DEFAULT_KP_KEY
         if not api_key:
             return {}
 

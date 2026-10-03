@@ -304,6 +304,15 @@ class AppAPI:
     def download_ffmpeg(self):
         """Автоматически скачивает и настраивает статический бинарник FFmpeg"""
         from backend.ffmpeg_manager import download_and_extract_ffmpeg
-        return download_and_extract_ffmpeg()
+
+        def on_progress(pct: int, msg: str):
+            if self._window:
+                safe_msg = msg.replace('\\', '\\\\').replace('"', '\\"').replace("'", "\\'")
+                try:
+                    self._window.evaluate_js(f'if (window.onFfmpegDownloadProgress) window.onFfmpegDownloadProgress({pct}, "{safe_msg}");')
+                except Exception:
+                    pass
+
+        return download_and_extract_ffmpeg(progress_callback=on_progress)
 
 

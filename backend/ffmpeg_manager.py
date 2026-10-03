@@ -125,55 +125,78 @@ def check_ffmpeg_version(ffmpeg_path: Optional[str] = None) -> dict:
             "error": str(e)
         }
 
-def get_download_url_for_os() -> dict:
-    """Возвращает проверенные ссылки на официальные статические сборки"""
+def get_download_info_for_os() -> dict:
+    """Возвращает проверенные ссылки на официальные статические сборки (с зеркалами)"""
     if sys.platform == "win32":
         return {
             "os": "windows",
-            "url": "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip",
+            "urls": [
+                "https://github.com/GyanD/codexffmpeg/releases/download/7.1/ffmpeg-7.1-essentials_build.zip",
+                "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip",
+                "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+            ],
             "format": "zip",
             "bin_name": "ffmpeg.exe"
         }
     elif sys.platform == "darwin":
         return {
             "os": "macos",
-            "url": "https://evermeet.cx/ffmpeg/getrelease/zip",
+            "urls": [
+                "https://evermeet.cx/ffmpeg/getrelease/zip"
+            ],
             "format": "zip",
             "bin_name": "ffmpeg"
         }
     else:
         return {
             "os": "linux",
-            "url": "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz",
+            "urls": [
+                "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz",
+                "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz"
+            ],
             "format": "tar.xz",
             "bin_name": "ffmpeg"
         }
 
 def download_and_extract_ffmpeg(progress_callback: Optional[Callable[[int, str], None]] = None) -> dict:
     """Скачивает и извлекает статический бинарник FFmpeg с отчетом о прогрессе"""
-    info = get_download_url_for_os()
-    url = info["url"]
+    info = get_download_info_for_os()
     target_dir = get_target_bin_dir()
     bin_name = info["bin_name"]
     final_bin_path = target_dir / bin_name
     temp_archive = target_dir / f"ffmpeg_download.{'zip' if info['format'] == 'zip' else 'tar.xz'}"
 
     try:
-        if progress_callback:
-            progress_callback(2, f"Подключение к серверу загрузки...")
+        connected = False
+        resp = None
+        last_err = None
 
-        resp = requests.get(url, stream=True, timeout=30)
-        resp.raise_for_status()
+        for u in info["urls"]:
+            try:
+                if progress_callback:
+                    progress_callback(3, "Подключение к серверу загрузки...")
+                r = requests.get(u, stream=True, timeout=15)
+                if r.status_code == 200:
+                    resp = r
+                    connected = True
+                    break
+            except Exception as ex:
+                last_err = ex
+                continue
+
+        if not connected or not resp:
+            return {"success": False, "error": f"Не удалось подключиться к серверам загрузки: {last_err}"}
+
         total_size = int(resp.headers.get("content-length", 0))
-
         downloaded = 0
+
         with open(temp_archive, "wb") as f:
-            for chunk in resp.iter_content(chunk_size=128 * 1024):
+            for chunk in resp.iter_content(chunk_size=256 * 1024):
                 if chunk:
                     f.write(chunk)
                     downloaded += len(chunk)
                     if total_size > 0 and progress_callback:
-                        pct = int((downloaded / total_size) * 85)
+                        pct = min(85, max(5, int((downloaded / total_size) * 85)))
                         mb = downloaded / (1024 * 1024)
                         total_mb = total_size / (1024 * 1024)
                         progress_callback(pct, f"Загрузка FFmpeg: {mb:.1f} из {total_mb:.1f} МБ ({pct}%)")

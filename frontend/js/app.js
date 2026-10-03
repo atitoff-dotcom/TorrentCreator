@@ -14,13 +14,29 @@ let screensManager = null;
 let releaseManager = null;
 let loaderTimeoutId = null;
 
-window.showLoader = function(title = 'Выполняется операция...', subtitle = 'Пожалуйста, подождите') {
+window.showLoader = function(title = 'Выполняется операция...', subtitle = 'Пожалуйста, подождите', progress = null) {
   const el = document.getElementById('globalLoader');
   const textEl = document.getElementById('loaderText');
   const subtextEl = document.getElementById('loaderSubtext');
+  const pCont = document.getElementById('loaderProgressContainer');
+  const pBar = document.getElementById('loaderProgressBar');
+  const pPerc = document.getElementById('loaderProgressPercent');
 
   if (textEl) textEl.textContent = title;
   if (subtextEl) subtextEl.textContent = subtitle;
+
+  if (progress !== null && progress !== undefined && pCont && pBar) {
+    const val = Math.min(100, Math.max(0, Math.round(progress)));
+    pCont.style.display = 'block';
+    pBar.style.width = `${val}%`;
+    if (pPerc) {
+      pPerc.style.display = 'block';
+      pPerc.textContent = `${val}%`;
+    }
+  } else if (pCont) {
+    pCont.style.display = 'none';
+    if (pPerc) pPerc.style.display = 'none';
+  }
 
   if (el) {
     el.style.display = 'flex';

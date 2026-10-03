@@ -169,32 +169,73 @@ export class ScreensManager {
       return;
     }
 
+    const paths = this.selectedScreens.map(s => s.file_path);
+    const total = paths.length;
     this.uploadBtn.disabled = true;
     this.uploadBtn.textContent = 'Загрузка...';
-    window.showLoader('Загрузка скриншотов на Fastpic...', `Отправка ${this.selectedScreens.length} кадров на фотохостинг`);
-    window.showStatus(`Загрузка ${this.selectedScreens.length} скриншотов на Fastpic...`);
 
-    const paths = this.selectedScreens.map(s => s.file_path);
+    window.showLoader(
+      'Загрузка скриншотов на Fastpic...',
+      `Подготовка к загрузке 0 из ${total} (0%)`,
+      0
+    );
+    window.showStatus(`Загрузка 0 из ${total} скриншотов на Fastpic...`);
+
+    const results = [];
     try {
-      const results = await window.pywebview.api.upload_screenshots(paths);
-      if (Array.isArray(results) && results.length > 0) {
+      for (let i = 0; i < total; i++) {
+        const currentNum = i + 1;
+        const percent = Math.round((i / total) * 100);
+        window.showLoader(
+          'Загрузка скриншотов на Fastpic...',
+          `Загрузка кадра ${currentNum} из ${total} (${percent}%)`,
+          percent
+        );
+        window.showStatus(`Загрузка скриншота ${currentNum} из ${total} на Fastpic...`);
+
+        let res = null;
+        if (window.pywebview.api.upload_single_screenshot) {
+          res = await window.pywebview.api.upload_single_screenshot(paths[i]);
+        } else {
+          const bulk = await window.pywebview.api.upload_screenshots([paths[i]]);
+          res = Array.isArray(bulk) && bulk.length > 0 ? bulk[0] : null;
+        }
+
+        if (res && res.success) {
+          results.push(res);
+        } else {
+          console.warn(`Не удалось загрузить кадр ${paths[i]}:`, res);
+        }
+
+        const updatedPercent = Math.round((currentNum / total) * 100);
+        window.showLoader(
+          'Загрузка скриншотов на Fastpic...',
+          `Загружено ${currentNum} из ${total} (${updatedPercent}%)`,
+          updatedPercent
+        );
+      }
+
+      if (results.length > 0) {
         this.uploadedResults = results;
         this.state.uploadedScreenshots = results;
-        window.showStatus(`Успешно загружено ${results.length} скриншотов!`, 'success');
+        window.showStatus(`Успешно загружено ${results.length} из ${total} скриншотов!`, 'success');
         
         // Уведомляем Tab 3 (Релиз) об обновлении ссылок
         if (window.onScreenshotsUploaded) {
           window.onScreenshotsUploaded(results);
         }
       } else {
-        window.showStatus('Ошибка загрузки скриншотов на Fastpic', 'error');
+        window.showStatus('Ошибка при загрузке скриншотов на Fastpic', 'error');
       }
     } catch (e) {
       window.showStatus(`Ошибка загрузки: ${e}`, 'error');
     } finally {
       this.uploadBtn.disabled = false;
       this.uploadBtn.textContent = 'Залить на хостинг';
-      window.hideLoader();
+      // Небольшая задержка перед скрытием чтобы пользователь увидел 100%
+      setTimeout(() => {
+        window.hideLoader();
+      }, 400);
     }
   }
 }

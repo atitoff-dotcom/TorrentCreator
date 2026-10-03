@@ -121,6 +121,14 @@ class AppAPI:
         except Exception as e:
             return {"error": str(e)}
 
+    def upload_single_screenshot(self, image_path: str, preview_size: int = 350):
+        """Загружает один скриншот на фотохостинг Fastpic"""
+        try:
+            from backend.screenshot_maker import upload_to_fastpic
+            return upload_to_fastpic(image_path, preview_size)
+        except Exception as e:
+            return {"error": str(e)}
+
     def upload_screenshots(self, image_paths: list, preview_size: int = 350):
         """Загружает список изображений на фотохостинг"""
         try:

@@ -54,7 +54,7 @@ class MetaFetcher:
     # --- TMDb Интеграция ---
     def search_tmdb(self, query: str, year: str = None) -> list:
         api_key = self.config.get("tmdb_api_key")
-        if not api_key:
+        if not api_key or not query or (query.isdigit() and len(query) <= 5):
             return []
 
         params = {
@@ -67,7 +67,7 @@ class MetaFetcher:
             params["year"] = year
 
         try:
-            resp = requests.get(f"{TMDB_BASE_URL}/search/multi", params=params, timeout=7)
+            resp = requests.get(f"{TMDB_BASE_URL}/search/multi", params=params, timeout=4)
             if resp.status_code == 200:
                 data = resp.json()
                 results = []
@@ -218,7 +218,7 @@ class MetaFetcher:
     # --- Кинопоиск Unofficial API Интеграция ---
     def search_kinopoisk(self, query: str) -> list:
         api_key = self.config.get("kinopoisk_api_key")
-        if not api_key:
+        if not api_key or not query or (query.isdigit() and len(query) <= 5):
             return []
 
         headers = {
@@ -229,7 +229,7 @@ class MetaFetcher:
         # 1. Сначала пробуем v2.2/films?keyword=...
         try:
             params = {"keyword": query, "page": 1}
-            resp = requests.get(f"{KP_UNOFFICIAL_BASE_URL}/v2.2/films", headers=headers, params=params, timeout=12)
+            resp = requests.get(f"{KP_UNOFFICIAL_BASE_URL}/v2.2/films", headers=headers, params=params, timeout=4)
             if resp.status_code == 200:
                 data = resp.json()
                 results = []
@@ -259,7 +259,7 @@ class MetaFetcher:
         # 2. Fallback на v2.1/films/search-by-keyword
         try:
             params = {"keyword": query, "page": 1}
-            resp = requests.get(f"{KP_UNOFFICIAL_BASE_URL}/v2.1/films/search-by-keyword", headers=headers, params=params, timeout=12)
+            resp = requests.get(f"{KP_UNOFFICIAL_BASE_URL}/v2.1/films/search-by-keyword", headers=headers, params=params, timeout=4)
             if resp.status_code == 200:
                 data = resp.json()
                 results = []

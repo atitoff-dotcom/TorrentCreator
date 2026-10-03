@@ -13,10 +13,18 @@ SUBPROCESS_EXTRA = {}
 if os.name == "nt":
     SUBPROCESS_EXTRA["creationflags"] = subprocess.CREATE_NO_WINDOW
 
+def get_ffmpeg_cmd() -> str:
+    try:
+        from backend.ffmpeg_manager import get_ffmpeg_path
+        p = get_ffmpeg_path()
+        return p if p else "ffmpeg"
+    except Exception:
+        return "ffmpeg"
+
 def get_video_duration_seconds(file_path: str) -> float:
     """Получает точную длительность видео в секундах через ffprobe/ffmpeg"""
     cmd = [
-        "ffmpeg", "-i", file_path
+        get_ffmpeg_cmd(), "-i", file_path
     ]
     try:
         proc = subprocess.run(cmd, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True, errors="ignore", **SUBPROCESS_EXTRA)
@@ -50,7 +58,7 @@ def format_timestamp(seconds: float) -> str:
 def extract_single_frame(file_path: str, timestamp_sec: float, output_path: Path) -> bool:
     """Извлекает одиночный кадр по таймкоду (быстрый seek)"""
     cmd = [
-        "ffmpeg",
+        get_ffmpeg_cmd(),
         "-ss", str(timestamp_sec),
         "-i", file_path,
         "-frames:v", "1",

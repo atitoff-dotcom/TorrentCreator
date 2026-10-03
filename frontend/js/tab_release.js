@@ -144,21 +144,43 @@ export class ReleaseManager {
     this.infoFileInput = document.getElementById('infoFileUrl');
     this.infoFileBtn = document.getElementById('uploadInfoFileBtn');
     this.infoFileStatus = document.getElementById('infoFileStatus');
-    this.publishRuBtn = document.getElementById('publishRutrackerBtn');
-    this.publishKzBtn = document.getElementById('publishKinozalBtn');
+    this.publishMainBtn = document.getElementById('publishMainBtn');
+    this.publishMainBtnText = document.getElementById('publishMainBtnText');
+    this.currentTrackerName = document.getElementById('currentTrackerName');
+    this.defaultTracker = 'kinozal';
+
+    window.updateDefaultTracker = (tracker) => this.updateTargetTracker(tracker);
+  }
+
+  updateTargetTracker(tracker) {
+    this.defaultTracker = tracker || 'kinozal';
+    if (this.publishMainBtnText) {
+      this.publishMainBtnText.textContent = this.defaultTracker === 'rutracker' 
+        ? 'Открыть и заполнить RuTracker' 
+        : 'Открыть и заполнить Кинозал';
+    }
+    if (this.currentTrackerName) {
+      this.currentTrackerName.textContent = this.defaultTracker === 'rutracker'
+        ? 'RuTracker'
+        : 'Кинозал';
+    }
   }
 
   bindEvents() {
-    if (this.publishRuBtn) {
-      this.publishRuBtn.addEventListener('click', () => this.handlePublishRuTracker());
-    }
-
-    if (this.publishKzBtn) {
-      this.publishKzBtn.addEventListener('click', () => this.handlePublishKinozal());
+    if (this.publishMainBtn) {
+      this.publishMainBtn.addEventListener('click', () => this.handlePublishMain());
     }
 
     if (this.infoFileBtn) {
       this.infoFileBtn.addEventListener('click', () => this.uploadMediaInfoPaste());
+    }
+  }
+
+  handlePublishMain() {
+    if (this.defaultTracker === 'rutracker') {
+      this.handlePublishRuTracker();
+    } else {
+      this.handlePublishKinozal();
     }
   }
 

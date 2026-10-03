@@ -36,9 +36,15 @@ def detect_subtitle_language(file_path: Path, sub_stream_index: int, sub_format:
         extra_flags["startupinfo"] = startupinfo
         extra_flags["creationflags"] = subprocess.CREATE_NO_WINDOW
 
+    try:
+        from backend.ffmpeg_manager import get_ffmpeg_path
+        ffmpeg_bin = get_ffmpeg_path() or "ffmpeg"
+    except Exception:
+        ffmpeg_bin = "ffmpeg"
+
     for seek in ("0", "120", "300"):
         cmd = [
-            "ffmpeg", "-y", "-loglevel", "error",
+            ffmpeg_bin, "-y", "-loglevel", "error",
             "-ss", seek,
             "-i", str(file_path),
             "-map", f"0:s:{sub_stream_index}",

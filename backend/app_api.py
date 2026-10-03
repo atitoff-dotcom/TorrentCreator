@@ -72,46 +72,58 @@ class AppAPI:
 
     def search_metadata(self, query: str, year: str = None):
         """Поиск фильма/сериала в Кинопоиске и TMDb (Кинопоиск в приоритете)"""
-        results = []
-        clean_q = (query or "").strip()
-        if not clean_q:
+        try:
+            results = []
+            clean_q = (query or "").strip()
+            if not clean_q:
+                return []
+
+            # Если строка состоит только из цифр (номер файла/диска вроде 00034, 01) - не ищем онлайн
+            if clean_q.isdigit() and len(clean_q) <= 5:
+                return []
+
+            # 1. Проверяем, не ссылка ли это на Кинопоиск (например, kinopoisk.ru/film/161023/)
+            kp_url_match = re.search(r'kinopoisk\.ru/(?:film|series)/(\d+)', clean_q)
+            if kp_url_match:
+                film_id = int(kp_url_match.group(1))
+                det = self.meta_fetcher.get_kinopoisk_details(film_id)
+                if det:
+                    return [{
+                        "source": "kinopoisk",
+                        "id": film_id,
+                        "kinopoisk_id": film_id,
+                        "title_ru": det.get("title_ru"),
+                        "title_orig": det.get("title_orig"),
+                        "year": det.get("year"),
+                        "poster_url": det.get("poster_url"),
+                        "rating_kinopoisk": det.get("kinopoisk_rating"),
+                        "overview": det.get("plot", "")[:120]
+                    }]
+
+            # 2. Если есть ключ Кинопоиска — ищем в первую очередь на Кинопоиске!
+            kp_results = self.meta_fetcher.search_kinopoisk(clean_q)
+            results.extend(kp_results)
+
+            # 3. Затем дополняем результатами TMDb
+            tmdb_results = self.meta_fetcher.search_tmdb(clean_q, year)
+            results.extend(tmdb_results)
+
+            return results
+        except Exception as e:
+            print(f"Error searching metadata: {e}")
             return []
-
-        # 1. Проверяем, не ссылка ли это на Кинопоиск (например, kinopoisk.ru/film/161023/)
-        kp_url_match = re.search(r'kinopoisk\.ru/(?:film|series)/(\d+)', clean_q)
-        if kp_url_match:
-            film_id = int(kp_url_match.group(1))
-            det = self.meta_fetcher.get_kinopoisk_details(film_id)
-            if det:
-                return [{
-                    "source": "kinopoisk",
-                    "id": film_id,
-                    "kinopoisk_id": film_id,
-                    "title_ru": det.get("title_ru"),
-                    "title_orig": det.get("title_orig"),
-                    "year": det.get("year"),
-                    "poster_url": det.get("poster_url"),
-                    "rating_kinopoisk": det.get("kinopoisk_rating"),
-                    "overview": det.get("plot", "")[:120]
-                }]
-
-        # 2. Если есть ключ Кинопоиска — ищем в первую очередь на Кинопоиске!
-        kp_results = self.meta_fetcher.search_kinopoisk(clean_q)
-        results.extend(kp_results)
-
-        # 3. Затем дополняем результатами TMDb
-        tmdb_results = self.meta_fetcher.search_tmdb(clean_q, year)
-        results.extend(tmdb_results)
-
-        return results
 
     def get_metadata_details(self, source: str, item_id: int, is_series: bool = False):
         """Получает полные детали фильма/сериала"""
-        if source == "tmdb":
-            return self.meta_fetcher.get_tmdb_details(item_id, is_series)
-        elif source == "kinopoisk":
-            return self.meta_fetcher.get_kinopoisk_details(item_id)
-        return {}
+        try:
+            if source == "tmdb":
+                return self.meta_fetcher.get_tmdb_details(item_id, is_series)
+            elif source == "kinopoisk":
+                return self.meta_fetcher.get_kinopoisk_details(item_id)
+            return {}
+        except Exception as e:
+            print(f"Error getting metadata details: {e}")
+            return {}
 
     def make_screenshots(self, file_path: str, count: int = 12):
         """Снимает набор скриншотов из видеофайла"""
@@ -242,5 +254,56 @@ class AppAPI:
             return res
         except Exception as e:
             return {"error": str(e)}
+
+    def get_config(self):
+        """Возвращает текущую конфигурацию приложения"""
+        return load_config()
+
+    def save_config(self, cfg: dict):
+        """Сохраняет конфигурацию приложения"""
+        current = load_config()
+        current.update(cfg)
+        return save_config(current)
+
+    def check_ffmpeg_status(self):
+        """Проверяет наличие и версию FFmpeg в системе"""
+        from backend.ffmpeg_manager import check_ffmpeg_version
+        return check_ffmpeg_version()
+
+    def select_ffmpeg_file(self):
+        """Открывает диалог выбора исполняемого файла ffmpeg"""
+        if not self._window:
+            return {"found": False, "error": "Окно не инициализировано"}
+        import sys
+        if sys.platform == "win32":
+            file_types = ('FFmpeg Executable (ffmpeg.exe)', 'All files (*.*)')
+        else:
+            file_types = ('FFmpeg Executable (ffmpeg)', 'All files (*.*)')
+
+        try:
+            dialog_type = webview.FileDialog.OPEN
+        except AttributeError:
+            dialog_type = webview.OPEN_DIALOG
+
+        result = self._window.create_file_dialog(
+            dialog_type,
+            allow_multiple=False,
+            file_types=file_types
+        )
+        if result and len(result) > 0:
+            selected_path = result[0]
+            from backend.ffmpeg_manager import check_ffmpeg_version
+            status = check_ffmpeg_version(selected_path)
+            if status.get("found"):
+                cfg = load_config()
+                cfg["ffmpeg_path"] = status["path"]
+                save_config(cfg)
+            return status
+        return {"found": False, "cancelled": True}
+
+    def download_ffmpeg(self):
+        """Автоматически скачивает и настраивает статический бинарник FFmpeg"""
+        from backend.ffmpeg_manager import download_and_extract_ffmpeg
+        return download_and_extract_ffmpeg()
 
 

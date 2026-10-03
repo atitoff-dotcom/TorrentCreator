@@ -238,13 +238,13 @@
               </div>
             </div>
 
-            <div style="margin-top: 24px; display: flex; flex-direction: column; gap: 12px;">
-              <button id="publishKinozalBtn" class="btn btn-primary" style="background: #e11d48; padding: 12px; font-size: 13.5px; font-weight: 600;">
-                <span>🌐</span> Открыть и заполнить Kinozal
+            <div style="margin-top: 20px; display: flex; flex-direction: column; align-items: center; gap: 8px;">
+              <button id="publishMainBtn" class="btn btn-secondary" style="padding: 10px 24px; font-size: 13.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; border-color: rgba(59, 130, 246, 0.4); box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
+                <span>🌐</span> <span id="publishMainBtnText">Открыть и заполнить Кинозал</span>
               </button>
-              <button id="publishRutrackerBtn" class="btn btn-primary" style="padding: 12px; font-size: 13.5px; font-weight: 600;">
-                <span>🌐</span> Открыть и заполнить RuTracker
-              </button>
+              <span id="publishTrackerHint" style="font-size: 11px; color: var(--text-muted);">
+                Целевой трекер: <span id="currentTrackerName" style="color: var(--primary); font-weight: 500;">Кинозал</span> (можно изменить в Настройках)
+              </span>
             </div>
 
             <div style="margin-top: 16px; padding: 12px 16px; background: rgba(16, 185, 129, 0.08); border-radius: var(--radius-sm); border: 1px solid rgba(16, 185, 129, 0.3); font-size: 11.5px; color: var(--text-muted); line-height: 1.5; text-align: center;">
@@ -262,6 +262,34 @@
           <span>⚙️ Настройки программы</span>
         </div>
         <div class="card-body">
+
+          <!-- Выбор трекера по умолчанию -->
+          <div class="form-group">
+            <label class="form-label">Трекер для публикации по умолчанию</label>
+            <select id="settingDefaultTracker" class="form-control">
+              <option value="kinozal">Кинозал (Kinozal.tv)</option>
+              <option value="rutracker">RuTracker.org</option>
+            </select>
+            <div class="form-hint">Определяет, какая кнопка отображается на вкладке «3. Релиз»</div>
+          </div>
+
+          <!-- Блок FFmpeg -->
+          <div class="form-group" style="padding: 14px; background: var(--bg-hover); border: 1px solid var(--border-color); border-radius: var(--radius-md);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <label class="form-label" style="margin: 0; font-weight: 600;">Утилита FFmpeg (видео и скриншоты)</label>
+              <span id="ffmpegStatusBadge" class="badge badge-green">Проверка...</span>
+            </div>
+            <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+              <input type="text" id="settingFfmpegPath" class="form-control" placeholder="Системный PATH или укажите путь..." readonly style="font-size: 12px;">
+              <button type="button" id="browseFfmpegBtn" class="btn btn-secondary" style="white-space: nowrap; font-size: 12px; padding: 6px 12px;">Обзор...</button>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center; justify-content: space-between;">
+              <button type="button" id="downloadFfmpegBtn" class="btn btn-secondary" style="font-size: 11.5px; padding: 5px 12px;">
+                ⬇️ Скачать FFmpeg автоматически
+              </button>
+              <span id="ffmpegVersionText" style="font-size: 11.5px; color: var(--text-muted);"></span>
+            </div>
+          </div>
 
           <div class="form-group">
             <label class="form-label">API-ключ TMDb (The Movie Database)</label>
@@ -305,9 +333,37 @@
     <div id="statusInfo">Python 3.14 + PyWebview</div>
   </footer>
 
+  <!-- Модальное окно предупреждения FFmpeg -->
+  <div id="ffmpegModal" class="loader-overlay" style="display: none;">
+    <div class="loader-card" style="max-width: 480px; text-align: left; align-items: stretch; gap: 10px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="font-size: 26px;">⚠️</span>
+        <div>
+          <h3 style="margin: 0; font-size: 16px; color: var(--text-main);" id="ffmpegModalTitle">Требуется FFmpeg</h3>
+          <span style="font-size: 11.5px; color: var(--text-muted);" id="ffmpegModalSubtitle">Необходим для анализа видео и нарезки кадров</span>
+        </div>
+      </div>
+      <p id="ffmpegModalDesc" style="font-size: 12.5px; color: var(--text-muted); line-height: 1.5; margin: 4px 0 10px 0;">
+        FFmpeg не найден в вашей системе. Для автоматической работы вы можете скачать его в один клик прямо в папку программы, либо указать путь к существующему файлу.
+      </p>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <button id="modalDownloadFfmpegBtn" class="btn btn-primary" style="padding: 10px; font-weight: 600; text-align: center;">
+          ⬇️ Скачать FFmpeg автоматически
+        </button>
+        <button id="modalBrowseFfmpegBtn" class="btn btn-secondary" style="padding: 8px; text-align: center;">
+          📁 Указать путь к ffmpeg вручную
+        </button>
+        <button id="modalIgnoreFfmpegBtn" class="btn btn-secondary" style="padding: 6px; font-size: 11px; opacity: 0.7; text-align: center;">
+          Пропустить (продолжить без FFmpeg)
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Глобальный оверлей блокировки и спиннера -->
   <div id="globalLoader" class="loader-overlay">
-    <div class="loader-card">
+    <div class="loader-card" style="position: relative;">
+      <button id="loaderCloseBtn" type="button" style="position: absolute; top: 10px; right: 12px; background: none; border: none; color: var(--text-muted); font-size: 16px; cursor: pointer; padding: 4px; border-radius: 4px; line-height: 1;" title="Закрыть оверлей">✕</button>
       <div class="loader-spinner"></div>
       <div id="loaderText" class="loader-text">Выполняется операция...</div>
       <div id="loaderSubtext" class="loader-subtext">Пожалуйста, подождите</div>

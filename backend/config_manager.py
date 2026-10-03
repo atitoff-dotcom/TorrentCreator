@@ -26,7 +26,9 @@ DEFAULT_CONFIG = {
     "screenshots_release_count": 4,
     "image_host": "fastpic",
     "fastpic_jpeg_quality": 95,
-    "preview_size": 350
+    "preview_size": 350,
+    "default_tracker": "kinozal",
+    "ffmpeg_path": ""
 }
 
 def load_config() -> dict:

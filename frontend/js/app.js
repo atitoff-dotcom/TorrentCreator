@@ -13,6 +13,7 @@ export const appState = {
 let screensManager = null;
 let releaseManager = null;
 let loaderTimeoutId = null;
+let loaderRafId = null;
 
 window.showLoader = function(title = 'Выполняется операция...', subtitle = 'Пожалуйста, подождите', progress = null) {
   const el = document.getElementById('globalLoader');
@@ -40,15 +41,17 @@ window.showLoader = function(title = 'Выполняется операция...
 
   if (el) {
     el.style.display = 'flex';
-    requestAnimationFrame(() => {
+    if (loaderRafId) cancelAnimationFrame(loaderRafId);
+    loaderRafId = requestAnimationFrame(() => {
       el.classList.add('active');
     });
   }
 
+  // Защитный авто-таймаут: оверлей гарантированно скроется через 10 секунд
   if (loaderTimeoutId) clearTimeout(loaderTimeoutId);
   loaderTimeoutId = setTimeout(() => {
     window.hideLoader();
-  }, 90000);
+  }, 10000);
 };
 
 window.hideLoader = function() {
@@ -56,14 +59,14 @@ window.hideLoader = function() {
     clearTimeout(loaderTimeoutId);
     loaderTimeoutId = null;
   }
+  if (loaderRafId) {
+    cancelAnimationFrame(loaderRafId);
+    loaderRafId = null;
+  }
   const el = document.getElementById('globalLoader');
   if (el) {
     el.classList.remove('active');
-    setTimeout(() => {
-      if (!el.classList.contains('active')) {
-        el.style.display = 'none';
-      }
-    }, 250);
+    el.style.display = 'none';
   }
 };
 
@@ -77,6 +80,11 @@ document.addEventListener('DOMContentLoaded', () => {
   initFileSelection();
   initManualSearch();
   initSettings();
+
+  document.getElementById('loaderCloseBtn')?.addEventListener('click', () => {
+    window.hideLoader();
+    window.showStatus('Операция отменена пользователем', 'info');
+  });
 });
 
 // 1. Управление темами (Светлая / Темная)
@@ -328,12 +336,32 @@ async function searchMetadata(query, year) {
   const dropdown = document.getElementById('searchResultsDropdown');
   if (!query) return;
 
+  const cleanQ = query.trim();
+
+  // Если имя файла состоит только из цифр (номер файла/диска вроде 00034, 01) - не блокируем поиск
+  if (/^\d{1,5}$/.test(cleanQ)) {
+    if (metaBadge) metaBadge.textContent = 'Ручной ввод';
+    window.showStatus('Файл с цифровым именем. Введите название фильма вручную.', 'info');
+    const titleInput = document.getElementById('metaTitleRu');
+    if (titleInput && !titleInput.value) {
+      titleInput.value = cleanQ;
+      appState.metaData = getReleaseFormData();
+    }
+    return;
+  }
+
   if (metaBadge) metaBadge.textContent = 'Поиск...';
-  window.showStatus(`Ищем в Кинопоиске / TMDb: ${query}...`);
-  window.showLoader('Поиск в онлайн-базах...', `Кинопоиск и TMDb: "${query}"`);
+  window.showStatus(`Ищем в Кинопоиске / TMDb: ${cleanQ}...`);
+  window.showLoader('Поиск в онлайн-базах...', `Кинопоиск и TMDb: "${cleanQ}"`);
 
   try {
-    const results = await window.pywebview.api.search_metadata(query, year);
+    // Ограничиваем ожидание поиска 6 секундами (защита от зависания сети)
+    const searchPromise = window.pywebview.api.search_metadata(cleanQ, year);
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Таймаут ответа онлайн-баз')), 6000)
+    );
+    const results = await Promise.race([searchPromise, timeoutPromise]);
+
     if (!results || results.length === 0) {
       if (metaBadge) metaBadge.textContent = 'Ручной ввод';
       if (dropdown) dropdown.style.display = 'none';
@@ -341,7 +369,7 @@ async function searchMetadata(query, year) {
       
       const titleInput = document.getElementById('metaTitleRu');
       if (titleInput && !titleInput.value) {
-        titleInput.value = query;
+        titleInput.value = cleanQ;
         appState.metaData = getReleaseFormData();
       }
       return;
@@ -473,10 +501,46 @@ function initStatus() {
   };
 }
 
-// 5. Настройки
+// 5. Настройки и FFmpeg
 function initSettings() {
   const saveBtn = document.getElementById('saveSettingsBtn');
-  
+  const browseFfmpegBtn = document.getElementById('browseFfmpegBtn');
+  const downloadFfmpegBtn = document.getElementById('downloadFfmpegBtn');
+  const ffmpegBadge = document.getElementById('ffmpegStatusBadge');
+  const ffmpegPathInput = document.getElementById('settingFfmpegPath');
+  const ffmpegVerText = document.getElementById('ffmpegVersionText');
+  const defaultTrackerSelect = document.getElementById('settingDefaultTracker');
+
+  const updateFfmpegUI = (status) => {
+    if (!status) return;
+    if (status.found) {
+      if (ffmpegBadge) {
+        if (status.is_outdated) {
+          ffmpegBadge.className = 'badge badge-yellow';
+          ffmpegBadge.textContent = 'Устаревший';
+        } else {
+          ffmpegBadge.className = 'badge badge-green';
+          ffmpegBadge.textContent = 'Активен';
+        }
+      }
+      if (ffmpegPathInput) ffmpegPathInput.value = status.path || '';
+      if (ffmpegVerText) {
+        ffmpegVerText.textContent = `v${status.version || 'актуальная'}` + (status.is_outdated ? ' (рекомендуется 5.0+)' : '');
+        ffmpegVerText.style.color = status.is_outdated ? 'var(--accent-yellow)' : 'var(--accent-green)';
+      }
+    } else {
+      if (ffmpegBadge) {
+        ffmpegBadge.className = 'badge badge-red';
+        ffmpegBadge.textContent = 'Не найден';
+      }
+      if (ffmpegPathInput) ffmpegPathInput.value = '';
+      if (ffmpegVerText) {
+        ffmpegVerText.textContent = 'Утилита не обнаружена';
+        ffmpegVerText.style.color = 'var(--accent-red)';
+      }
+    }
+  };
+
   // Загрузка настроек из бэкенда
   const loadSettings = async () => {
     if (window.pywebview && window.pywebview.api && window.pywebview.api.get_config) {
@@ -485,7 +549,17 @@ function initSettings() {
         if (cfg.kinopoisk_api_key) document.getElementById('settingKinopoiskKey').value = cfg.kinopoisk_api_key;
         if (cfg.tmdb_api_key) document.getElementById('settingTmdbKey').value = cfg.tmdb_api_key;
         if (cfg.image_host) document.getElementById('settingImageHost').value = cfg.image_host;
+        if (cfg.default_tracker && defaultTrackerSelect) {
+          defaultTrackerSelect.value = cfg.default_tracker;
+          if (window.updateDefaultTracker) window.updateDefaultTracker(cfg.default_tracker);
+        }
       }
+    }
+
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.check_ffmpeg_status) {
+      const status = await window.pywebview.api.check_ffmpeg_status();
+      updateFfmpegUI(status);
+      checkFfmpegStartup(status);
     }
   };
 
@@ -493,13 +567,40 @@ function initSettings() {
   window.addEventListener('pywebviewready', loadSettings);
   setTimeout(loadSettings, 500);
 
+  if (defaultTrackerSelect) {
+    defaultTrackerSelect.addEventListener('change', () => {
+      if (window.updateDefaultTracker) window.updateDefaultTracker(defaultTrackerSelect.value);
+    });
+  }
+
+  if (browseFfmpegBtn) {
+    browseFfmpegBtn.addEventListener('click', async () => {
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.select_ffmpeg_file) {
+        const res = await window.pywebview.api.select_ffmpeg_file();
+        if (res && res.found) {
+          updateFfmpegUI(res);
+          showStatus(`FFmpeg настроен: ${res.version}`, 'success');
+        } else if (!res.cancelled) {
+          showStatus('Выбран некорректный файл FFmpeg', 'error');
+        }
+      }
+    });
+  }
+
+  if (downloadFfmpegBtn) {
+    downloadFfmpegBtn.addEventListener('click', () => triggerFfmpegDownload(updateFfmpegUI));
+  }
+
   if (saveBtn) {
     saveBtn.addEventListener('click', async () => {
       const config = {
         kinopoisk_api_key: document.getElementById('settingKinopoiskKey').value,
         tmdb_api_key: document.getElementById('settingTmdbKey').value,
-        image_host: document.getElementById('settingImageHost').value
+        image_host: document.getElementById('settingImageHost').value,
+        default_tracker: defaultTrackerSelect ? defaultTrackerSelect.value : 'kinozal'
       };
+
+      if (window.updateDefaultTracker) window.updateDefaultTracker(config.default_tracker);
 
       if (window.pywebview && window.pywebview.api && window.pywebview.api.save_config) {
         await window.pywebview.api.save_config(config);
@@ -531,6 +632,108 @@ function initSettings() {
       alert('Текст описания скопирован в буфер обмена!\n\nВставьте его (Ctrl+V) в поле "Application Summary" в форме регистрации ключа на TMDb.');
     });
   }
+}
+
+// Проверка FFmpeg при старте и модальное окно
+function checkFfmpegStartup(status) {
+  if (!status || (status.found && !status.is_outdated)) {
+    return; // Всё в порядке
+  }
+
+  const modal = document.getElementById('ffmpegModal');
+  const title = document.getElementById('ffmpegModalTitle');
+  const subtitle = document.getElementById('ffmpegModalSubtitle');
+  const desc = document.getElementById('ffmpegModalDesc');
+  const dlBtn = document.getElementById('modalDownloadFfmpegBtn');
+  const browseBtn = document.getElementById('modalBrowseFfmpegBtn');
+  const ignoreBtn = document.getElementById('modalIgnoreFfmpegBtn');
+
+  if (!modal) return;
+
+  if (status.found && status.is_outdated) {
+    if (title) title.textContent = 'Обнаружен устаревший FFmpeg';
+    if (subtitle) subtitle.textContent = `Текущая версия: ${status.version}`;
+    if (desc) desc.textContent = 'У вас установлена старая версия FFmpeg (< 5.0). Для стабильной работы с современным видео (HEVC, AV1, 10-бит) и быстрой нарезки кадров рекомендуется обновиться.';
+    if (dlBtn) dlBtn.textContent = '⬇️ Обновить FFmpeg автоматически';
+  } else {
+    if (title) title.textContent = 'Требуется утилита FFmpeg';
+    if (subtitle) subtitle.textContent = 'Необходима для анализа видео и нарезки кадров';
+    if (desc) desc.textContent = 'FFmpeg не обнаружен в вашей системе. Для автоматической работы вы можете скачать его в один клик прямо в папку программы, либо указать путь вручную.';
+    if (dlBtn) dlBtn.textContent = '⬇️ Скачать FFmpeg автоматически';
+  }
+
+  modal.style.display = 'flex';
+  requestAnimationFrame(() => modal.classList.add('active'));
+
+  if (ignoreBtn) {
+    ignoreBtn.onclick = () => {
+      modal.classList.remove('active');
+      setTimeout(() => modal.style.display = 'none', 250);
+    };
+  }
+
+  if (browseBtn) {
+    browseBtn.onclick = async () => {
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.select_ffmpeg_file) {
+        const res = await window.pywebview.api.select_ffmpeg_file();
+        if (res && res.found) {
+          modal.classList.remove('active');
+          setTimeout(() => modal.style.display = 'none', 250);
+          showStatus(`FFmpeg настроен: ${res.version}`, 'success');
+          const badge = document.getElementById('ffmpegStatusBadge');
+          if (badge) {
+            badge.className = 'badge badge-green';
+            badge.textContent = 'Активен';
+          }
+        }
+      }
+    };
+  }
+
+  if (dlBtn) {
+    dlBtn.onclick = async () => {
+      modal.classList.remove('active');
+      setTimeout(() => modal.style.display = 'none', 250);
+      triggerFfmpegDownload();
+    };
+  }
+}
+
+async function triggerFfmpegDownload(onCompleteCallback = null) {
+  window.showLoader(
+    'Загрузка FFmpeg...',
+    'Скачивание официальной статической сборки...',
+    15
+  );
+  window.showStatus('Скачивание и настройка FFmpeg...');
+
+  try {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.download_ffmpeg) {
+      window.showLoader('Загрузка FFmpeg...', 'Распаковка и проверка бинарного файла...', 85);
+      const res = await window.pywebview.api.download_ffmpeg();
+      if (res && res.success) {
+        window.showLoader('Загрузка FFmpeg...', 'Готово! FFmpeg успешно настроен', 100);
+        window.showStatus(`FFmpeg успешно установлен: ${res.version}!`, 'success');
+        if (onCompleteCallback) {
+          onCompleteCallback({
+            found: true,
+            is_outdated: false,
+            path: res.path,
+            version: res.version
+          });
+        }
+      } else {
+        window.showStatus('Ошибка скачивания FFmpeg: ' + (res.error || 'неизвестно'), 'error');
+      }
+    }
+  } catch (e) {
+    window.showStatus('Ошибка загрузки: ' + e, 'error');
+  } finally {
+    setTimeout(() => {
+      window.hideLoader();
+    }, 600);
+  }
+}
 
   // Ручной поиск фильма/сериала
   const searchBtn = document.getElementById('manualSearchBtn');

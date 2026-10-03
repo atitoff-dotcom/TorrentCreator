@@ -76,11 +76,19 @@ class AppAPI:
             results = []
             clean_q = (query or "").strip()
             if not clean_q:
-                return []
+                return {"results": [], "no_keys": False}
+
+            self.meta_fetcher.reload_config()
+            kp_key = (self.meta_fetcher.config.get("kinopoisk_api_key") or "").strip()
+            tmdb_key = (self.meta_fetcher.config.get("tmdb_api_key") or "").strip()
+
+            # Если пользователь не настроил ни один из ключей поисковых систем
+            if not kp_key and not tmdb_key:
+                return {"results": [], "no_keys": True}
 
             # Если строка состоит только из цифр (номер файла/диска вроде 00034, 01) - не ищем онлайн
             if clean_q.isdigit() and len(clean_q) <= 5:
-                return []
+                return {"results": [], "no_keys": False}
 
             # 1. Проверяем, не ссылка ли это на Кинопоиск (например, kinopoisk.ru/film/161023/)
             kp_url_match = re.search(r'kinopoisk\.ru/(?:film|series)/(\d+)', clean_q)
@@ -88,30 +96,35 @@ class AppAPI:
                 film_id = int(kp_url_match.group(1))
                 det = self.meta_fetcher.get_kinopoisk_details(film_id)
                 if det:
-                    return [{
-                        "source": "kinopoisk",
-                        "id": film_id,
-                        "kinopoisk_id": film_id,
-                        "title_ru": det.get("title_ru"),
-                        "title_orig": det.get("title_orig"),
-                        "year": det.get("year"),
-                        "poster_url": det.get("poster_url"),
-                        "rating_kinopoisk": det.get("kinopoisk_rating"),
-                        "overview": det.get("plot", "")[:120]
-                    }]
+                    return {
+                        "results": [{
+                            "source": "kinopoisk",
+                            "id": film_id,
+                            "kinopoisk_id": film_id,
+                            "title_ru": det.get("title_ru"),
+                            "title_orig": det.get("title_orig"),
+                            "year": det.get("year"),
+                            "poster_url": det.get("poster_url"),
+                            "rating_kinopoisk": det.get("kinopoisk_rating"),
+                            "overview": det.get("plot", "")[:120]
+                        }],
+                        "no_keys": False
+                    }
 
             # 2. Если есть ключ Кинопоиска — ищем в первую очередь на Кинопоиске!
-            kp_results = self.meta_fetcher.search_kinopoisk(clean_q)
-            results.extend(kp_results)
+            if kp_key:
+                kp_results = self.meta_fetcher.search_kinopoisk(clean_q)
+                results.extend(kp_results)
 
             # 3. Затем дополняем результатами TMDb
-            tmdb_results = self.meta_fetcher.search_tmdb(clean_q, year)
-            results.extend(tmdb_results)
+            if tmdb_key:
+                tmdb_results = self.meta_fetcher.search_tmdb(clean_q, year)
+                results.extend(tmdb_results)
 
-            return results
+            return {"results": results, "no_keys": False}
         except Exception as e:
             print(f"Error searching metadata: {e}")
-            return []
+            return {"results": [], "no_keys": False}
 
     def get_metadata_details(self, source: str, item_id: int, is_series: bool = False):
         """Получает полные детали фильма/сериала"""

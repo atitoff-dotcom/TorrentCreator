@@ -32,7 +32,12 @@
       </button>
     </nav>
 
-    <div class="header-actions">
+    <div class="header-actions" style="display: flex; gap: 8px; align-items: center;">
+      <!-- Кнопка О программе -->
+      <button id="aboutBtn" class="btn btn-secondary" title="О программе" style="font-size: 12px; font-weight: 500; padding: 4px 10px; height: 32px; display: inline-flex; align-items: center; gap: 5px;">
+        <span>ℹ️</span> <span>О программе</span>
+      </button>
+
       <!-- Переключатель светлая / темная тема -->
       <button id="themeToggleBtn" class="icon-btn" title="Переключить тему (Светлая / Темная)">
         <span id="themeIcon">🌙</span>
@@ -356,6 +361,50 @@
         <button id="modalIgnoreFfmpegBtn" class="btn btn-secondary" style="padding: 6px; font-size: 11px; opacity: 0.7; text-align: center;">
           Пропустить (продолжить без FFmpeg)
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модальное окно "О программе" -->
+  <div id="aboutModal" class="loader-overlay" style="display: none;">
+    <div class="loader-card" style="max-width: 480px; text-align: left; align-items: stretch; gap: 12px; position: relative;">
+      <button id="aboutCloseIconBtn" type="button" style="position: absolute; top: 12px; right: 14px; background: none; border: none; color: var(--text-muted); font-size: 16px; cursor: pointer; padding: 4px; border-radius: 4px; line-height: 1;" title="Закрыть">✕</button>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <img src="logo.png" alt="Logo" style="width: 42px; height: 42px; border-radius: 8px;">
+        <div>
+          <h3 style="margin: 0; font-size: 18px; color: var(--text-main); font-weight: 600;">TorrentCreator</h3>
+          <span style="font-size: 12px; color: var(--text-muted);" id="aboutVersionText">Версия v1.0.6</span>
+        </div>
+      </div>
+      <div style="font-size: 13px; color: var(--text-main); line-height: 1.6; margin: 4px 0; background: var(--bg-hover); padding: 14px 16px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+        Если вы нашли в программе ошибки или у вас есть пожелания, напишите автору желательно с скриншотами по адресу:<br>
+        <div style="margin-top: 8px;">
+          <a href="mailto:a.tit.off@gmail.com" class="ext-link" data-url="mailto:a.tit.off@gmail.com" style="color: var(--primary); font-weight: 600; text-decoration: underline; font-size: 14px;">a.tit.off@gmail.com</a>
+        </div>
+      </div>
+      <div style="display: flex; justify-content: flex-end; margin-top: 4px;">
+        <button id="aboutCloseBtn" class="btn btn-secondary" style="padding: 6px 20px;">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модальное окно "Требуются ключи поиска" -->
+  <div id="noKeysModal" class="loader-overlay" style="display: none;">
+    <div class="loader-card" style="max-width: 450px; text-align: left; align-items: stretch; gap: 12px; position: relative;">
+      <button id="noKeysCloseIconBtn" type="button" style="position: absolute; top: 12px; right: 14px; background: none; border: none; color: var(--text-muted); font-size: 16px; cursor: pointer; padding: 4px; border-radius: 4px; line-height: 1;" title="Закрыть">✕</button>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <span style="font-size: 28px;">🔑</span>
+        <div>
+          <h3 style="margin: 0; font-size: 16px; color: var(--text-main); font-weight: 600;">Требуются ключи поиска</h3>
+          <span style="font-size: 11.5px; color: var(--text-muted);">Кинопоиск и TMDb</span>
+        </div>
+      </div>
+      <div style="font-size: 13px; color: var(--text-main); line-height: 1.5; margin: 4px 0; background: var(--bg-hover); padding: 12px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+        Для поиска вам необходимо установить ключи поисковых систем. Смотри в настройках.
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px;">
+        <button id="noKeysCloseBtn" class="btn btn-secondary" style="padding: 6px 14px;">Понятно</button>
+        <button id="noKeysGoSettingsBtn" class="btn btn-primary" style="padding: 6px 16px;">⚙️ Смотри в настройках</button>
       </div>
     </div>
   </div>

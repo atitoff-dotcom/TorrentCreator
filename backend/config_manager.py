@@ -2,9 +2,6 @@ import json
 import sys
 from pathlib import Path
 
-DEFAULT_KP_KEY = "6834c208-9ed1-451f-8d5d-6fcaa5f2a0f0"
-DEFAULT_TMDB_KEY = "782af07368e06c3b1bc48bf2a1d06631"
-
 def get_config_path() -> Path:
     # 1. Executable directory (portable mode)
     if getattr(sys, 'frozen', False) or 'pyapp' in sys.executable.lower():
@@ -28,8 +25,8 @@ CONFIG_PATH = get_config_path()
 
 DEFAULT_CONFIG = {
     "theme": "dark",
-    "kinopoisk_api_key": DEFAULT_KP_KEY,
-    "tmdb_api_key": DEFAULT_TMDB_KEY,
+    "kinopoisk_api_key": "",
+    "tmdb_api_key": "",
     "screenshots_count": 12,
     "screenshots_release_count": 4,
     "image_host": "fastpic",
@@ -48,11 +45,6 @@ def load_config() -> dict:
             data = json.load(f)
             merged = DEFAULT_CONFIG.copy()
             merged.update(data)
-            # Если ключи в файле пустые — используем рабочие ключи по умолчанию
-            if not merged.get("kinopoisk_api_key"):
-                merged["kinopoisk_api_key"] = DEFAULT_KP_KEY
-            if not merged.get("tmdb_api_key"):
-                merged["tmdb_api_key"] = DEFAULT_TMDB_KEY
             return merged
     except Exception:
         return DEFAULT_CONFIG.copy()

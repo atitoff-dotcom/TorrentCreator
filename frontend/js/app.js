@@ -80,6 +80,8 @@ document.addEventListener('DOMContentLoaded', () => {
   initFileSelection();
   initManualSearch();
   initSettings();
+  initAboutModal();
+  initNoKeysModal();
 
   document.getElementById('loaderCloseBtn')?.addEventListener('click', () => {
     window.hideLoader();
@@ -361,7 +363,26 @@ async function searchMetadata(query, year) {
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('Таймаут ответа онлайн-баз')), 10000)
     );
-    const results = await Promise.race([searchPromise, timeoutPromise]);
+    const rawRes = await Promise.race([searchPromise, timeoutPromise]);
+    let results = [];
+
+    if (Array.isArray(rawRes)) {
+      results = rawRes;
+    } else if (rawRes && typeof rawRes === 'object') {
+      if (rawRes.no_keys) {
+        window.hideLoader();
+        if (metaBadge) metaBadge.textContent = 'Ручной ввод';
+        window.showStatus('Для поиска вам необходимо установить ключи поисковых систем. Смотри в настройках.', 'warning');
+        if (window.showNoKeysModal) window.showNoKeysModal();
+        const titleInput = document.getElementById('metaTitleRu');
+        if (titleInput && !titleInput.value) {
+          titleInput.value = cleanQ;
+          appState.metaData = getReleaseFormData();
+        }
+        return;
+      }
+      results = rawRes.results || [];
+    }
 
     if (!results || results.length === 0) {
       if (metaBadge) metaBadge.textContent = 'Ручной ввод';
@@ -741,5 +762,64 @@ async function triggerFfmpegDownload(onCompleteCallback = null) {
     window.hideLoader();
     window.showStatus('Ошибка загрузки: ' + e, 'error');
     alert(`Ошибка загрузки FFmpeg: ${e}`);
+  }
+}
+
+// 7. Модальное окно "О программе"
+function initAboutModal() {
+  const modal = document.getElementById('aboutModal');
+  const openBtn = document.getElementById('aboutBtn');
+  const closeBtn = document.getElementById('aboutCloseBtn');
+  const closeIconBtn = document.getElementById('aboutCloseIconBtn');
+
+  if (!modal) return;
+
+  const openModal = () => {
+    modal.style.display = 'flex';
+    requestAnimationFrame(() => modal.classList.add('active'));
+  };
+
+  const closeModal = () => {
+    modal.classList.remove('active');
+    setTimeout(() => { modal.style.display = 'none'; }, 220);
+  };
+
+  if (openBtn) openBtn.addEventListener('click', openModal);
+  if (closeBtn) closeBtn.addEventListener('click', closeModal);
+  if (closeIconBtn) closeIconBtn.addEventListener('click', closeModal);
+}
+
+// 8. Модальное окно отсутствия API-ключей
+function initNoKeysModal() {
+  const modal = document.getElementById('noKeysModal');
+  const closeBtn = document.getElementById('noKeysCloseBtn');
+  const closeIconBtn = document.getElementById('noKeysCloseIconBtn');
+  const goSettingsBtn = document.getElementById('noKeysGoSettingsBtn');
+
+  if (!modal) return;
+
+  window.showNoKeysModal = () => {
+    modal.style.display = 'flex';
+    requestAnimationFrame(() => modal.classList.add('active'));
+  };
+
+  const closeModal = () => {
+    modal.classList.remove('active');
+    setTimeout(() => { modal.style.display = 'none'; }, 220);
+  };
+
+  if (closeBtn) closeBtn.addEventListener('click', closeModal);
+  if (closeIconBtn) closeIconBtn.addEventListener('click', closeModal);
+
+  if (goSettingsBtn) {
+    goSettingsBtn.addEventListener('click', () => {
+      closeModal();
+      // Переключаемся на вкладку Настройки
+      const settingsTabBtn = document.querySelector('.tab-btn[data-tab="tab-settings"]');
+      if (settingsTabBtn) settingsTabBtn.click();
+      setTimeout(() => {
+        document.getElementById('settingKinopoiskKey')?.focus();
+      }, 300);
+    });
   }
 }

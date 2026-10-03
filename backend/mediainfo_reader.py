@@ -28,10 +28,13 @@ def detect_subtitle_language(file_path: Path, sub_stream_index: int, sub_format:
     if any(non_text in fmt_upper for non_text in ("PGS", "VOBSUB", "SUP", "HDMV")):
         return "und"
 
-    startupinfo = None
+    extra_flags = {}
     if os.name == "nt":
         startupinfo = subprocess.STARTUPINFO()
         startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+        extra_flags["startupinfo"] = startupinfo
+        extra_flags["creationflags"] = subprocess.CREATE_NO_WINDOW
 
     for seek in ("0", "120", "300"):
         cmd = [
@@ -48,8 +51,8 @@ def detect_subtitle_language(file_path: Path, sub_stream_index: int, sub_format:
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
-                startupinfo=startupinfo,
-                timeout=4
+                timeout=4,
+                **extra_flags
             )
             raw = res.stdout.decode('utf-8', errors='ignore')
             clean = re.sub(r'\d{2}:\d{2}:\d{2}[,\.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,\.]\d{3}', ' ', raw)

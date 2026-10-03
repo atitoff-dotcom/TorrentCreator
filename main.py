@@ -32,7 +32,7 @@ def main():
     icon_path = base_dir / "assets" / "icon.ico"
 
     # Запуск окна WebView2 с иконкой
-    webview.start(debug=True, icon=str(icon_path.resolve()) if icon_path.exists() else None)
+    webview.start(debug=False, icon=str(icon_path.resolve()) if icon_path.exists() else None)
 
 if __name__ == "__main__":
     main()

@@ -9,13 +9,17 @@ import requests
 
 CACHE_DIR = Path(__file__).resolve().parent.parent / "cache" / "screenshots"
 
+SUBPROCESS_EXTRA = {}
+if os.name == "nt":
+    SUBPROCESS_EXTRA["creationflags"] = subprocess.CREATE_NO_WINDOW
+
 def get_video_duration_seconds(file_path: str) -> float:
     """Получает точную длительность видео в секундах через ffprobe/ffmpeg"""
     cmd = [
         "ffmpeg", "-i", file_path
     ]
     try:
-        proc = subprocess.run(cmd, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True, errors="ignore")
+        proc = subprocess.run(cmd, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True, errors="ignore", **SUBPROCESS_EXTRA)
         match = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.?\d*)", proc.stderr)
         if match:
             h, m, s = match.groups()
@@ -55,7 +59,7 @@ def extract_single_frame(file_path: str, timestamp_sec: float, output_path: Path
         "-y"
     ]
     try:
-        res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+        res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10, **SUBPROCESS_EXTRA)
         return res.returncode == 0 and output_path.exists()
     except Exception as e:
         print(f"Error extracting frame at {timestamp_sec}: {e}")

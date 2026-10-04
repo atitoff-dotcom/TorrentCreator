@@ -122,9 +122,11 @@ class MetaFetcher:
             release_date = data.get("first_air_date" if is_tv else "release_date", "")
             year = release_date.split("-")[0] if release_date else ""
 
-            # Страны и жанры
+            # Страны, жанры и кинокомпании
             countries = [c.get("name") for c in data.get("production_countries", [])]
             genres = [g.get("name") for g in data.get("genres", [])]
+            companies = [c.get("name") for c in data.get("production_companies", []) if c.get("name")]
+            studio_str = ", ".join(companies[:4])
 
             # Режиссеры и актеры
             credits = data.get("credits", {})
@@ -171,6 +173,8 @@ class MetaFetcher:
                 "is_russian": is_russian,
                 "year": year,
                 "countries": ", ".join(countries),
+                "studio": studio_str,
+                "production_companies": studio_str,
                 "genres": ", ".join(genres),
                 "directors": ", ".join(directors),
                 "actors": ", ".join(actors),
@@ -316,8 +320,14 @@ class MetaFetcher:
 
             kp_rating_raw = data.get("ratingKinopoisk")
             kp_rating_str = f"{kp_rating_raw}" if kp_rating_raw else None
+            imdb_id = data.get("imdbId")
             imdb_rating_raw = data.get("ratingImdb")
             imdb_rating_str = f"{imdb_rating_raw}" if imdb_rating_raw else None
+
+            # Обогащаем данными о кинокомпаниях из TMDb по IMDb ID
+            studio_str = ""
+            if imdb_id:
+                studio_str = self.get_tmdb_companies_by_imdb(imdb_id)
 
             # Определение отечественного фильма на Кинопоиске
             countries_list = [c.get("country", "") for c in data.get("countries", []) if c.get("country")]
@@ -342,18 +352,62 @@ class MetaFetcher:
                 "is_russian": is_russian,
                 "year": str(data.get("year", "")),
                 "countries": ", ".join(countries),
+                "studio": studio_str,
+                "production_companies": studio_str,
                 "genres": ", ".join(genres),
                 "directors": ", ".join(directors),
                 "actors": ", ".join(actors),
                 "plot": data.get("description", ""),
                 "poster_url": poster_url,
                 "posters": [poster_url] if poster_url else [],
-                "imdb_id": data.get("imdbId"),
+                "imdb_id": imdb_id,
                 "imdb_rating": imdb_rating_str,
                 "rating_imdb": imdb_rating_str,
-                "imdb_url": f"https://www.imdb.com/title/{data.get('imdbId')}/" if data.get("imdbId") else "",
+                "imdb_url": f"https://www.imdb.com/title/{imdb_id}/" if imdb_id else "",
                 "kinopoisk_url": data.get("webUrl") or f"https://www.kinopoisk.ru/film/{film_id}/"
             }
         except Exception as e:
             print(f"Error getting Kinopoisk details: {e}")
             return {}
+
+    def get_tmdb_companies_by_imdb(self, imdb_id: str) -> str:
+        """Получает названия кинокомпаний из TMDb по IMDb ID"""
+        tmdb_key = (self.config.get("tmdb_api_key") or "").strip()
+        if not tmdb_key or not imdb_id:
+            return ""
+        try:
+            resp = requests.get(
+                f"{TMDB_BASE_URL}/find/{imdb_id}",
+                params={"api_key": tmdb_key, "external_source": "imdb_id"},
+                timeout=4
+            )
+            if resp.status_code != 200:
+                return ""
+            data = resp.json()
+            movie_res = data.get("movie_results", [])
+            tv_res = data.get("tv_results", [])
+            if movie_res:
+                tmdb_id = movie_res[0].get("id")
+                det_resp = requests.get(
+                    f"{TMDB_BASE_URL}/movie/{tmdb_id}",
+                    params={"api_key": tmdb_key},
+                    timeout=4
+                )
+                if det_resp.status_code == 200:
+                    companies = [c.get("name") for c in det_resp.json().get("production_companies", []) if c.get("name")]
+                    return ", ".join(companies[:4])
+            elif tv_res:
+                tv_id = tv_res[0].get("id")
+                det_resp = requests.get(
+                    f"{TMDB_BASE_URL}/tv/{tv_id}",
+                    params={"api_key": tmdb_key},
+                    timeout=4
+                )
+                if det_resp.status_code == 200:
+                    networks = [n.get("name") for n in det_resp.json().get("networks", []) if n.get("name")]
+                    companies = [c.get("name") for c in det_resp.json().get("production_companies", []) if c.get("name")]
+                    all_c = networks + [c for c in companies if c not in networks]
+                    return ", ".join(all_c[:4])
+        except Exception as e:
+            print(f"Error fetching TMDb companies for IMDb {imdb_id}: {e}")
+        return ""

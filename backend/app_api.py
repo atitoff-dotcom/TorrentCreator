@@ -214,10 +214,14 @@ class AppAPI:
             ru_bbcode = build_rutracker_bbcode(meta, media, release_opts, screens)
             kz_fields = build_kinozal_fields(meta, media, release_opts, screens)
 
+            from backend.rules_kinozal import validate_kinozal_release
+            kz_val = validate_kinozal_release(kz_fields)
+
             payload = {
                 "rutracker_title": ru_title,
                 "rutracker_bbcode": ru_bbcode,
                 "kinozal_fields": kz_fields,
+                "kinozal_validation": kz_val,
                 "info_file_url": info_url or ""
             }
             return payload
@@ -327,5 +331,38 @@ class AppAPI:
                     pass
 
         return download_and_extract_ffmpeg(progress_callback=on_progress)
+
+    def validate_kinozal_release(self, fields: dict):
+        """Валидирует данные раздачи по эталонным правилам Кинозала"""
+        try:
+            from backend.rules_kinozal import validate_kinozal_release
+            return validate_kinozal_release(fields)
+        except Exception as e:
+            return {"is_valid": False, "errors": [{"title": "Ошибка валидатора", "message": str(e)}], "warnings": []}
+
+    def auto_fix_kinozal_release(self, fields: dict):
+        """Применяет автоматические исправления к полям раздачи"""
+        try:
+            from backend.rules_kinozal import auto_fix_kinozal_release
+            return auto_fix_kinozal_release(fields)
+        except Exception as e:
+            return fields
+
+    def get_kinozal_rules_help(self):
+        """Возвращает структурированный каталог правил для справочника (Help)"""
+        try:
+            from backend.rules_kinozal import get_kinozal_rules_catalog
+            return get_kinozal_rules_catalog()
+        except Exception as e:
+            return []
+
+    def export_kinozal_rules_doc(self):
+        """Генерирует официальный эталонный Регламент правил в Markdown"""
+        try:
+            from backend.rules_kinozal import export_rules_to_markdown
+            return export_rules_to_markdown()
+        except Exception as e:
+            return f"Ошибка экспорта: {e}"
+
 
 

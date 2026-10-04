@@ -301,8 +301,30 @@ export class ReleaseManager {
     const brStr = track.bitrate ? `~${track.bitrate.replace('kbps', 'Kbps')}` : '';
     const techSpecs = [srStr, track.format, chStr, brStr].filter(Boolean).join(', ');
 
-    // Начальное описание перевода/студии
+    // Начальное описание перевода/студии (с очисткой от технического мусора кодеков)
     let initDesc = (track.title || '').trim();
+    if (initDesc) {
+      const parenMatch = initDesc.match(/\(([^)]+)\)/);
+      if (parenMatch) {
+        let inside = parenMatch[1];
+        inside = inside.replace(/(двухголос\w*|одноголос\w*|многоголос\w*|дублирован\w*|профессиональн\w*|любительск\w*|авторск\w*|закадров\w*|голос\w*|перевод\w*|озвучк\w*|запись с\w*)[\s,:]*/gi, '').trim();
+        if (inside && !inside.match(/^(dts|ac3|aac|flac|\d+(\.\d+)?(\s*ch|\s*kbps)?)$/i)) {
+          initDesc = inside.replace(/^[,.\s]+|[,.\s]+$/g, '');
+        } else {
+          initDesc = '';
+        }
+      } else if (/(dts(-hd)?|ac3|ac-3|e-ac-3|eac3|truehd|atmos|aac|flac|lpcm|mp3|\b\d+\.\d+\b|\b\d+\s*ch\b|\b\d+\s*kbps\b|\b\d+\s*k?hz\b)/i.test(initDesc)) {
+        initDesc = initDesc.replace(/(dts(-hd(\s+ma)?)?|ac3|ac-3|e-ac-3|eac3|truehd|atmos|aac|flac|lpcm|mp3)[\s,]*/gi, '');
+        initDesc = initDesc.replace(/\b\d+\.\d+\b[\s,]*/g, '');
+        initDesc = initDesc.replace(/\b\d+\s*ch\b[\s,]*/gi, '');
+        initDesc = initDesc.replace(/\b\d+\s*kbps\b[\s,]*/gi, '');
+        initDesc = initDesc.replace(/\b\d+\s*k?hz\b[\s,]*/gi, '');
+        initDesc = initDesc.replace(/(двухголос\w*|одноголос\w*|многоголос\w*|дублирован\w*|профессиональн\w*|любительск\w*|авторск\w*|закадров\w*)[\s,]*/gi, '');
+        initDesc = initDesc.replace(/[()]/g, '').trim();
+        initDesc = initDesc.replace(/^[,.\s\-–—:]+|[,.\s\-–—:]+$/g, '');
+      }
+    }
+
     const genericLower = initDesc.toLowerCase();
     if (['dub', 'дуб', 'дубляж', 'mvo', 'пм', 'dvo', 'пд', 'pvo', 'по', 'original', 'оригинал', 'rus', 'eng'].includes(genericLower)) {
       initDesc = '';
@@ -619,10 +641,33 @@ export class ReleaseManager {
       return;
     }
 
+    try {
+      const opts = this.getReleaseOptions();
+
+      // 1. Предварительная валидация по правилам Кинозала
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.generate_release_data) {
+        window.showStatus('Проверка релиза по правилам Кинозала...', 'info');
+        const payload = await window.pywebview.api.generate_release_data(opts, this.state.uploadedScreenshots);
+        const val = payload?.kinozal_validation;
+
+        // Если обнаружены критические ошибки ручного или авто-ввода
+        if (val && !val.is_valid && val.errors && val.errors.length > 0) {
+          this.showKzValidationModal(val, opts);
+          return;
+        }
+      }
+
+      await this.executeKinozalPublish(opts);
+    } catch (e) {
+      window.showStatus('Ошибка публикации: ' + e, 'error');
+      window.hideLoader();
+    }
+  }
+
+  async executeKinozalPublish(opts) {
     window.showStatus('Запускаем браузер и заполняем поля Кинозала...', 'info');
     window.showLoader('Публикация на Кинозале...', 'Запуск браузера Chrome и заполнение полей');
     try {
-      const opts = this.getReleaseOptions();
       const res = await window.pywebview.api.publish_kinozal(opts, this.state.uploadedScreenshots);
       if (res && res.error) {
         window.showStatus('Ошибка: ' + res.error, 'error');
@@ -642,6 +687,72 @@ export class ReleaseManager {
       window.hideLoader();
     }
   }
+
+  showKzValidationModal(val, opts) {
+    const modal = document.getElementById('kzValidationModal');
+    const list = document.getElementById('kzValModalList');
+    const autoFixBtn = document.getElementById('kzValModalAutoFixBtn');
+    const ignoreBtn = document.getElementById('kzValModalIgnoreBtn');
+    const editBtn = document.getElementById('kzValModalEditBtn');
+    const closeIconBtn = document.getElementById('kzValModalCloseIconBtn');
+
+    if (!modal || !list) return;
+
+    const allIssues = [...(val.errors || []), ...(val.warnings || [])];
+    list.innerHTML = allIssues.map(item => `
+      <div style="background: var(--bg-card); border-left: 3px solid ${val.errors.includes(item) ? '#ef4444' : '#f59e0b'}; padding: 8px 10px; border-radius: 3px;">
+        <div style="font-weight: 600; font-size: 12.5px; color: ${val.errors.includes(item) ? '#ef4444' : '#f59e0b'}; display: flex; align-items: center; gap: 6px;">
+          <span>${val.errors.includes(item) ? '❌' : '⚠️'}</span>
+          <span>${item.title}</span>
+        </div>
+        <div style="margin-top: 3px; color: var(--text-main); font-size: 11.5px; line-height: 1.4;">
+          ${item.message}
+        </div>
+        ${item.example_good ? `
+          <div style="margin-top: 4px; font-size: 10.5px; color: var(--text-muted); font-family: monospace;">
+            Правило: ${item.example_good}
+          </div>
+        ` : ''}
+      </div>
+    `).join('');
+
+    const closeModal = () => {
+      modal.classList.remove('active');
+      setTimeout(() => { modal.style.display = 'none'; }, 220);
+    };
+
+    if (closeIconBtn) closeIconBtn.onclick = closeModal;
+    if (editBtn) editBtn.onclick = closeModal;
+
+    if (ignoreBtn) {
+      ignoreBtn.onclick = async () => {
+        closeModal();
+        await this.executeKinozalPublish(opts);
+      };
+    }
+
+    if (autoFixBtn) {
+      autoFixBtn.onclick = async () => {
+        closeModal();
+        window.showStatus('Применяем автоматические исправления...', 'info');
+        try {
+          // Вызываем бэкенд автоисправление
+          if (window.pywebview && window.pywebview.api && window.pywebview.api.auto_fix_kinozal_release) {
+            const fixedOpts = await window.pywebview.api.auto_fix_kinozal_release(opts);
+            await this.executeKinozalPublish(fixedOpts || opts);
+          } else {
+            await this.executeKinozalPublish(opts);
+          }
+        } catch (e) {
+          await this.executeKinozalPublish(opts);
+        }
+      };
+    }
+
+    modal.style.display = 'flex';
+    requestAnimationFrame(() => modal.classList.add('active'));
+  }
 }
+
 
 

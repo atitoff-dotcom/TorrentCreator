@@ -138,18 +138,18 @@ def build_rutracker_title(meta: dict, media: dict, release_opts: dict) -> str:
     subtitles = release_opts.get("subtitle_tracks") if release_opts.get("subtitle_tracks") is not None else media.get("subtitles", [])
     has_subtitles = has_russian_full_subtitles(subtitles)
     is_domestic = is_domestic_film(meta)
+    is_series = meta.get("is_series", False)
 
     if is_domestic:
         voice_tag = ""
     elif audio_tracks:
-        voice_tag = build_kinozal_translation_title(audio_tracks, False, has_subtitles, release_opts.get("translation_type_label", "ПМ"))
+        voice_tag = build_kinozal_translation_title(audio_tracks, False, has_subtitles, release_opts.get("translation_type_label", "ПМ"), is_series=is_series)
     else:
         trans_type = release_opts.get("translation_type_label", "Профессиональный (многоголосый)")
         studio = release_opts.get("studio", "").strip()
         voice_tag = f"{trans_type} ({studio})" if studio else trans_type
 
     # Сериальные метки
-    is_series = meta.get("is_series", False)
     if is_series:
         season_num = release_opts.get("season", 1)
         episodes_str = release_opts.get("episodes", "Серии 1-X")
@@ -769,10 +769,43 @@ def has_kinozal_tk(audio_tracks: list, subtitles: list = None, release_opts: dic
 
     return False
 
-def build_kinozal_translation_title(audio_tracks: list, is_domestic: bool, has_subtitles: bool, fallback_code: str = "ПМ") -> str:
+def is_tech_audio_string(s: str) -> bool:
+    """Проверяет, содержит ли строка технические параметры звука или служебные слова"""
+    if not s:
+        return True
+    s_lower = s.lower().strip()
+    if s_lower in IGNORED_STUDIO_WORDS:
+        return True
+    tech_patterns = [
+        r"\b\d+\s*kbps\b", r"\b\d+\.\d+\b", r"\b\d+\s*ch\b", r"\b\d+\s*k?hz\b",
+        r"\bdts(-hd)?\b", r"\bac3\b", r"\bac-3\b", r"\btruehd\b", r"\bflac\b", r"\baac\b",
+        r"\bстерео\b", r"\bдвухголос", r"\bодноголос", r"\bмногоголос", r"\bдублирован"
+    ]
+    for p in tech_patterns:
+        if re.search(p, s_lower):
+            return True
+    return False
+
+def extract_clean_author_name(raw_desc: str) -> str:
+    """Извлекает чистую фамилию автора/переводчика, отсекая технический мусор"""
+    if not raw_desc:
+        return ""
+    s = raw_desc.strip()
+    # Если строка вида "... (двухголосый, П.Гланц и И.Королёва)"
+    m = re.search(r"\(([^)]+)\)", s)
+    if m:
+        s = m.group(1)
+    s = re.sub(r"(двухголос\w*|одноголос\w*|многоголос\w*|дублирован\w*|профессиональн\w*|любительск\w*|авторск\w*|закадров\w*|перевод\w*|озвучк\w*)[\s,:]*", "", s, flags=re.I)
+    s = re.sub(r"[\d\.,~]+|\bkbps\b|\bch\b|\bdts\b|\bac3\b", "", s, flags=re.I)
+    s = s.strip(" ,.-–—()")
+    parts = s.split()
+    return parts[-1] if parts else ""
+
+def build_kinozal_translation_title(audio_tracks: list, is_domestic: bool, has_subtitles: bool, fallback_code: str = "ПМ", is_series: bool = False) -> str:
     """Группирует коды перевода для названия раздачи по правилам Кинозала (docs/new_kinozal.md):
        например: 'ДБ, 2 х ПД, 3 х АП (Гаврилов, Живов, Володарский)'
-       или: 'ПМ (Культура, R5), СТ'
+       или для сериалов: 'ПМ (LostFilm), СТ'
+       или для фильмов: 'ДБ, ПД, ПО' (без студий в скобках!)
        или: 'РУ'
     """
     if is_domestic:
@@ -805,16 +838,16 @@ def build_kinozal_translation_title(audio_tracks: list, is_domestic: bool, has_s
 
         if type_key == "avo":
             if desc:
-                parts = desc.split()
-                last_name = parts[-1] if parts else desc
-                if last_name not in author_names:
-                    author_names.append(last_name)
+                author_name = extract_clean_author_name(desc)
+                if author_name and author_name not in author_names and not is_tech_audio_string(author_name):
+                    author_names.append(author_name)
             code_counts["АП"] = code_counts.get("АП", 0) + 1
         elif type_key in KZ_CODE_MAP:
             c = KZ_CODE_MAP[type_key]
             if c not in ("БП", "СТ", "ТК"):
                 code_counts[c] = code_counts.get(c, 0) + 1
-                if desc and desc.lower() not in IGNORED_STUDIO_WORDS:
+                # Студии в заголовке разрешены только для сериалов (п. 51 правил Кинозала)
+                if is_series and desc and not is_tech_audio_string(desc):
                     code_studios.setdefault(c, []).append(desc)
 
     if not has_russian:
@@ -835,8 +868,9 @@ def build_kinozal_translation_title(audio_tracks: list, is_domestic: bool, has_s
         if cnt == 0:
             continue
         if c == "АП":
-            if author_names:
-                names_str = ", ".join(author_names)
+            clean_authors = [a for a in author_names if not is_tech_audio_string(a)]
+            if clean_authors:
+                names_str = ", ".join(clean_authors)
                 if cnt > 1:
                     result_parts.append(f"{cnt} х АП ({names_str})")
                 else:
@@ -846,13 +880,14 @@ def build_kinozal_translation_title(audio_tracks: list, is_domestic: bool, has_s
         elif c == "(Смешной перевод)":
             result_parts.append(c)
         else:
-            studios = code_studios.get(c, [])
+            # Для фильмов студии в скобках НЕ пишем, чтобы не загромождать заголовок
+            studios = code_studios.get(c, []) if is_series else []
             studios_clean = []
             for s in studios:
                 if s not in studios_clean:
                     studios_clean.append(s)
             studios_str = ", ".join(studios_clean)
-            if studios_str:
+            if studios_str and is_series:
                 if cnt > 1:
                     result_parts.append(f"{cnt} х {c} ({studios_str})")
                 else:
@@ -965,7 +1000,8 @@ def build_kinozal_fields(meta: dict, media: dict, release_opts: dict, uploaded_s
     subtitles = release_opts.get("subtitle_tracks") if release_opts.get("subtitle_tracks") is not None else media.get("subtitles", [])
     enabled_subs = [s for s in subtitles if s.get("enabled", True)]
     has_russian_subs = has_russian_full_subtitles(enabled_subs)
-    voice_code_full = build_kinozal_translation_title(audio_tracks, is_domestic, has_russian_subs, voice_code)
+    is_series = meta.get("is_series", False)
+    voice_code_full = build_kinozal_translation_title(audio_tracks, is_domestic, has_russian_subs, voice_code, is_series=is_series)
 
     # Особенности видеоряда
     video_features = detect_video_features(media, release_opts)
@@ -978,7 +1014,6 @@ def build_kinozal_fields(meta: dict, media: dict, release_opts: dict, uploaded_s
     has_tk = has_kinozal_tk(audio_tracks, enabled_subs, release_opts)
 
     # Сериальные метки
-    is_series = meta.get("is_series", False)
     season_num = release_opts.get("season", 1)
     episodes_str = str(release_opts.get("episodes") or release_opts.get("episodes_str") or meta.get("episodes") or "").strip()
     episodes_count = release_opts.get("episodes_count", 0) or meta.get("episodes_count", 0)
@@ -1040,9 +1075,17 @@ def build_kinozal_fields(meta: dict, media: dict, release_opts: dict, uploaded_s
     genres_formatted = ", ".join(genres_list) if genres_list else "Драма"
 
     # Выпущено: Страна, киностудия
-    country_part = countries or "США"
-    studio_meta = meta.get("studio") or meta.get("production_companies") or ""
-    released_str = f"{country_part}, {studio_meta}".strip(", ") if studio_meta else country_part
+    # Сначала через запятую перечисляются страны, потом через запятую Кинокомпании
+    country_part = (countries or "").strip()
+    studio_meta = (meta.get("studio") or meta.get("production_companies") or "").strip()
+
+    released_parts = []
+    if country_part:
+        released_parts.append(country_part)
+    if studio_meta and studio_meta.lower() != country_part.lower():
+        released_parts.append(studio_meta)
+
+    released_str = ", ".join(released_parts) if released_parts else (country_part or "США")
 
     # Режиссер и В ролях (апострофы меняем на ` согласно правилу п.249)
     director = (meta.get("directors") or "").replace("'", "`").strip()

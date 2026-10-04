@@ -33,6 +33,11 @@
     </nav>
 
     <div class="header-actions" style="display: flex; gap: 8px; align-items: center;">
+      <!-- Кнопка Правила Кинозала -->
+      <button id="kzRulesBtn" class="btn btn-secondary" title="Справочник правил Кинозала" style="font-size: 12px; font-weight: 500; padding: 4px 10px; height: 32px; display: inline-flex; align-items: center; gap: 5px;">
+        <span>📘</span> <span>Правила Кинозала</span>
+      </button>
+
       <!-- Кнопка О программе -->
       <button id="aboutBtn" class="btn btn-secondary" title="О программе" style="font-size: 12px; font-weight: 500; padding: 4px 10px; height: 32px; display: inline-flex; align-items: center; gap: 5px;">
         <span>ℹ️</span> <span>О программе</span>
@@ -118,9 +123,14 @@
                   <input type="text" id="metaCountry" class="form-control" placeholder="США, Великобритания">
                 </div>
                 <div class="form-group" style="margin-bottom: 0;">
-                  <label class="form-label">Жанр (2-6 через запятую)</label>
-                  <input type="text" id="metaGenre" class="form-control" placeholder="Фантастика, драма, приключения">
+                  <label class="form-label">Кинокомпания / Студия</label>
+                  <input type="text" id="metaStudio" class="form-control" placeholder="Paramount Vantage, Miramax...">
                 </div>
+              </div>
+
+              <div class="form-group" style="margin-bottom: 10px;">
+                <label class="form-label">Жанр (2-6 через запятую)</label>
+                <input type="text" id="metaGenre" class="form-control" placeholder="Фантастика, драма, приключения">
               </div>
 
               <div class="form-group" style="margin-bottom: 10px;">
@@ -241,6 +251,15 @@
                   Залить
                 </button>
               </div>
+            </div>
+
+            <!-- Индикатор проверки правил Кинозала -->
+            <div id="kzValidationBanner" style="display: none; margin-top: 16px; padding: 12px 14px; border-radius: var(--radius-sm); font-size: 12px; border: 1px solid var(--border-color); background: var(--bg-hover);">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span id="kzValidationTitle" style="font-weight: 600; display: inline-flex; align-items: center; gap: 6px;"></span>
+                <button type="button" id="kzValidationAutoFixBtn" class="btn btn-primary" style="display: none; padding: 4px 10px; font-size: 11px;">🔧 Исправить автоматически</button>
+              </div>
+              <div id="kzValidationList" style="margin-top: 8px; display: flex; flex-direction: column; gap: 6px; font-size: 11.5px;"></div>
             </div>
 
             <div style="margin-top: 20px; display: flex; flex-direction: column; align-items: center; gap: 8px;">
@@ -373,7 +392,7 @@
         <img src="logo.png" alt="Logo" style="width: 42px; height: 42px; border-radius: 8px;">
         <div>
           <h3 style="margin: 0; font-size: 18px; color: var(--text-main); font-weight: 600;">TorrentCreator</h3>
-          <span style="font-size: 12px; color: var(--text-muted);" id="aboutVersionText">Версия v1.0.6</span>
+          <span style="font-size: 12px; color: var(--text-muted);" id="aboutVersionText">Версия v1.0.7</span>
         </div>
       </div>
       <div style="font-size: 13px; color: var(--text-main); line-height: 1.6; margin: 4px 0; background: var(--bg-hover); padding: 14px 16px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
@@ -405,6 +424,69 @@
       <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px;">
         <button id="noKeysCloseBtn" class="btn btn-secondary" style="padding: 6px 14px;">Понятно</button>
         <button id="noKeysGoSettingsBtn" class="btn btn-primary" style="padding: 6px 16px;">⚙️ Смотри в настройках</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модальное окно "Справочник правил Кинозала (Help)" -->
+  <div id="kzRulesModal" class="loader-overlay" style="display: none;">
+    <div class="loader-card" style="max-width: 780px; width: 90vw; max-height: 85vh; text-align: left; align-items: stretch; gap: 12px; position: relative; display: flex; flex-direction: column;">
+      <button id="kzRulesCloseIconBtn" type="button" style="position: absolute; top: 12px; right: 14px; background: none; border: none; color: var(--text-muted); font-size: 16px; cursor: pointer; padding: 4px; border-radius: 4px; line-height: 1;" title="Закрыть">✕</button>
+      
+      <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 26px;">📘</span>
+          <div>
+            <h3 style="margin: 0; font-size: 17px; color: var(--text-main); font-weight: 600;">Справочник правил Кинозала</h3>
+            <span style="font-size: 11.5px; color: var(--text-muted);">Единый официальный регламент оформления раздач</span>
+          </div>
+        </div>
+        <button id="kzRulesExportBtn" class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px; margin-right: 32px;" title="Скопировать официальный регламент для Администрации">
+          📋 Экспорт (Markdown)
+        </button>
+      </div>
+
+      <!-- Поиск и фильтрация правил -->
+      <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
+        <input type="text" id="kzRulesSearch" class="form-control" placeholder="Поиск по правилам (длина, качество, студии, выпущено)..." style="font-size: 12px; height: 32px;">
+        <select id="kzRulesCategoryFilter" class="form-control" style="font-size: 12px; height: 32px;">
+          <option value="all">Все разделы</option>
+        </select>
+      </div>
+
+      <!-- Контейнер карточек правил -->
+      <div id="kzRulesContainer" style="overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 10px; padding-right: 4px; max-height: calc(85vh - 160px);">
+        <!-- Карточки генерируются динамически из backend/rules_kinozal.py -->
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; border-top: 1px solid var(--border-color); padding-top: 8px;">
+        <button id="kzRulesCloseBtn" class="btn btn-secondary" style="padding: 6px 16px;">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модальное окно "Предупреждение валидатора Кинозала" -->
+  <div id="kzValidationModal" class="loader-overlay" style="display: none;">
+    <div class="loader-card" style="max-width: 550px; width: 90vw; text-align: left; align-items: stretch; gap: 12px; position: relative;">
+      <button id="kzValModalCloseIconBtn" type="button" style="position: absolute; top: 12px; right: 14px; background: none; border: none; color: var(--text-muted); font-size: 16px; cursor: pointer; padding: 4px; border-radius: 4px; line-height: 1;" title="Закрыть">✕</button>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="font-size: 26px;">⚠️</span>
+        <div>
+          <h3 style="margin: 0; font-size: 16px; color: var(--text-main); font-weight: 600;">Замечания по правилам Кинозала</h3>
+          <span style="font-size: 11.5px; color: var(--text-muted);">Обнаружены несоответствия перед отправкой</span>
+        </div>
+      </div>
+
+      <div id="kzValModalList" style="max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; background: var(--bg-hover); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-size: 12px;"></div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; gap: 8px;">
+        <button id="kzValModalIgnoreBtn" class="btn btn-secondary" style="font-size: 11px; padding: 6px 10px; color: var(--text-muted);" title="Отправить на Кинозал несмотря на замечания">
+          Всё равно продолжить
+        </button>
+        <div style="display: flex; gap: 8px;">
+          <button id="kzValModalEditBtn" class="btn btn-secondary" style="font-size: 12px; padding: 6px 14px;">✏️ Исправить руками</button>
+          <button id="kzValModalAutoFixBtn" class="btn btn-primary" style="font-size: 12px; padding: 6px 16px;">🔧 Исправить и продолжить</button>
+        </div>
       </div>
     </div>
   </div>

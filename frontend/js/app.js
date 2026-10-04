@@ -82,6 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initSettings();
   initAboutModal();
   initNoKeysModal();
+  initKzRulesModal();
 
   document.getElementById('loaderCloseBtn')?.addEventListener('click', () => {
     window.hideLoader();
@@ -276,12 +277,15 @@ function renderMediaInfo(data) {
 
 export function getReleaseFormData() {
   const current = appState.metaData || {};
+  const studioVal = (document.getElementById('metaStudio')?.value || '').trim();
   return {
     ...current,
     title_ru: (document.getElementById('metaTitleRu')?.value || '').trim(),
     title_orig: (document.getElementById('metaTitleOrig')?.value || '').trim(),
     year: (document.getElementById('metaYear')?.value || '').trim(),
     countries: (document.getElementById('metaCountry')?.value || '').trim(),
+    studio: studioVal,
+    production_companies: studioVal,
     genres: (document.getElementById('metaGenre')?.value || '').trim(),
     directors: (document.getElementById('metaDirector')?.value || '').trim(),
     actors: (document.getElementById('metaCast')?.value || '').trim(),
@@ -292,7 +296,7 @@ export function getReleaseFormData() {
 
 export function initReleaseForm() {
   const fieldIds = [
-    'metaTitleRu', 'metaTitleOrig', 'metaYear', 'metaCountry',
+    'metaTitleRu', 'metaTitleOrig', 'metaYear', 'metaCountry', 'metaStudio',
     'metaGenre', 'metaDirector', 'metaCast', 'metaPoster', 'metaPlot'
   ];
 
@@ -489,6 +493,7 @@ function renderMetaDetails(m) {
   setVal('metaTitleOrig', m.title_orig);
   setVal('metaYear', m.year);
   setVal('metaCountry', m.countries);
+  setVal('metaStudio', m.studio || m.production_companies);
   setVal('metaGenre', m.genres);
   setVal('metaDirector', m.directors);
   setVal('metaCast', m.actors);
@@ -823,3 +828,123 @@ function initNoKeysModal() {
     });
   }
 }
+
+// 9. Модальное окно "Справочник правил Кинозала (Help)"
+function initKzRulesModal() {
+  const modal = document.getElementById('kzRulesModal');
+  const openBtn = document.getElementById('kzRulesBtn');
+  const closeBtn = document.getElementById('kzRulesCloseBtn');
+  const closeIconBtn = document.getElementById('kzRulesCloseIconBtn');
+  const exportBtn = document.getElementById('kzRulesExportBtn');
+  const searchInput = document.getElementById('kzRulesSearch');
+  const categoryFilter = document.getElementById('kzRulesCategoryFilter');
+  const container = document.getElementById('kzRulesContainer');
+
+  if (!modal) return;
+
+  let allRules = [];
+
+  const renderRules = () => {
+    if (!container) return;
+    const query = (searchInput?.value || '').toLowerCase().trim();
+    const selCat = categoryFilter?.value || 'all';
+
+    const filtered = allRules.filter(r => {
+      const matchCat = (selCat === 'all') || (r.category === selCat);
+      const matchQuery = !query || 
+        r.title.toLowerCase().includes(query) || 
+        r.description.toLowerCase().includes(query) || 
+        r.id.toLowerCase().includes(query) ||
+        (r.example_good && r.example_good.toLowerCase().includes(query));
+      return matchCat && matchQuery;
+    });
+
+    if (filtered.length === 0) {
+      container.innerHTML = `
+        <div style="text-align: center; color: var(--text-muted); padding: 30px; font-size: 13px;">
+          Ни одного правила не найдено по запросу "${query}"
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = filtered.map(r => `
+      <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+          <div style="font-weight: 600; font-size: 13.5px; color: var(--text-main);">
+            ${r.title} <span style="font-size: 10.5px; color: var(--text-muted); font-family: monospace;">(${r.id})</span>
+          </div>
+          <span class="badge ${r.severity === 'error' ? 'badge-red' : 'badge-yellow'}" style="font-size: 10px; padding: 2px 6px;">
+            ${r.severity === 'error' ? 'Критично' : 'Предупреждение'}
+          </span>
+        </div>
+
+        <div style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">
+          ${r.description}
+        </div>
+
+        ${r.example_good ? `
+          <div style="background: rgba(16, 185, 129, 0.08); border-left: 3px solid #10b981; padding: 6px 10px; border-radius: 2px; font-size: 11.5px; color: var(--text-main);">
+            <strong style="color: #10b981;">✓ Правильно:</strong> <span style="font-family: monospace;">${r.example_good}</span>
+          </div>
+        ` : ''}
+
+        ${r.example_bad ? `
+          <div style="background: rgba(239, 68, 68, 0.08); border-left: 3px solid #ef4444; padding: 6px 10px; border-radius: 2px; font-size: 11.5px; color: var(--text-main);">
+            <strong style="color: #ef4444;">✕ Ошибка:</strong> <span style="font-family: monospace;">${r.example_bad}</span>
+          </div>
+        ` : ''}
+      </div>
+    `).join('');
+  };
+
+  const loadRules = async () => {
+    try {
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.get_kinozal_rules_help) {
+        allRules = await window.pywebview.api.get_kinozal_rules_help();
+        if (categoryFilter) {
+          const cats = [...new Set(allRules.map(r => r.category))];
+          categoryFilter.innerHTML = `<option value="all">Все разделы (${allRules.length})</option>` +
+            cats.map(c => `<option value="${c}">${c}</option>`).join('');
+        }
+        renderRules();
+      }
+    } catch (e) {
+      console.error('Error loading Kinozal rules:', e);
+    }
+  };
+
+  const openModal = async () => {
+    modal.style.display = 'flex';
+    requestAnimationFrame(() => modal.classList.add('active'));
+    if (allRules.length === 0) {
+      await loadRules();
+    }
+  };
+
+  const closeModal = () => {
+    modal.classList.remove('active');
+    setTimeout(() => { modal.style.display = 'none'; }, 220);
+  };
+
+  if (openBtn) openBtn.addEventListener('click', openModal);
+  if (closeBtn) closeBtn.addEventListener('click', closeModal);
+  if (closeIconBtn) closeIconBtn.addEventListener('click', closeModal);
+  if (searchInput) searchInput.addEventListener('input', renderRules);
+  if (categoryFilter) categoryFilter.addEventListener('change', renderRules);
+
+  if (exportBtn) {
+    exportBtn.addEventListener('click', async () => {
+      try {
+        if (window.pywebview && window.pywebview.api && window.pywebview.api.export_kinozal_rules_doc) {
+          const doc = await window.pywebview.api.export_kinozal_rules_doc();
+          await navigator.clipboard.writeText(doc);
+          window.showStatus('Официальный регламент правил Кинозала скопирован в буфер обмена в формате Markdown!', 'success');
+        }
+      } catch (e) {
+        window.showStatus('Ошибка экспорта правил: ' + e, 'error');
+      }
+    });
+  }
+}
+

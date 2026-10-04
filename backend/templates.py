@@ -73,6 +73,43 @@ def is_domestic_film(meta: dict) -> bool:
 
     return False
 
+def has_russian_full_subtitles(subtitles: list) -> bool:
+    """Проверяет наличие включенных ПОЛНЫХ РУССКИХ субтитров для кода СТ в заголовке Кинозала.
+    По правилам Кинозала код СТ означает 'полные русские субтитры'.
+    Иностранные субтитры (английские и т.д.) и форсированные (только надписи) как СТ в названии не указываются.
+    """
+    if not subtitles:
+        return False
+
+    for s in subtitles:
+        if isinstance(s, dict) and not s.get("enabled", True):
+            continue
+
+        # Проверка на forced / только надписи / комментарии
+        if s.get("forced") is True:
+            continue
+        sub_type = (s.get("type") or "").lower()
+        if sub_type in ("forced", "форсированные", "надписи", "комментарии", "commentary"):
+            continue
+
+        title = (s.get("title") or "").lower()
+        if any(w in title for w in ("forced", "надпис", "форс", "табличк", "коммент")):
+            continue
+
+        # Проверка на русский язык
+        lang = (s.get("language") or "").lower()
+        is_russian = (
+            "рус" in lang
+            or "rus" in lang
+            or lang in ("ru", "russian")
+            or "рус" in title
+        )
+
+        if is_russian:
+            return True
+
+    return False
+
 def build_rutracker_title(meta: dict, media: dict, release_opts: dict) -> str:
     title_ru = meta.get("title_ru") or media.get("filename")
     title_orig = meta.get("title_orig") or ""
@@ -99,7 +136,7 @@ def build_rutracker_title(meta: dict, media: dict, release_opts: dict) -> str:
     # Озвучка
     audio_tracks = release_opts.get("audio_tracks", [])
     subtitles = release_opts.get("subtitle_tracks") if release_opts.get("subtitle_tracks") is not None else media.get("subtitles", [])
-    has_subtitles = bool([s for s in subtitles if s.get("enabled", True)])
+    has_subtitles = has_russian_full_subtitles(subtitles)
     is_domestic = is_domestic_film(meta)
 
     if is_domestic:
@@ -308,6 +345,8 @@ KZ_CODE_MAP = {
     "sub": "СТ",
     "nk": "НК",
     "tk": "ТК",
+    "dub_ts": "ДБ (TS)",
+    "funny": "(Смешной перевод)",
     "ai_dub": "ДБ (AI)",
     "ai_mvo": "ЛМ (AI)",
     "ai_ldvo": "ЛД (AI)",
@@ -327,6 +366,9 @@ KZ_TRANSLATION_NAME_MAP = {
     "original": "Отсутствует",
     "sub": "Полные субтитры",
     "nk": "Не требуется",
+    "tk": "Тифлокомментарии",
+    "dub_ts": "Дублированный (TS)",
+    "funny": "Пародийный перевод",
     "ai_dub": "Дублированный (AI)",
     "ai_mvo": "Любительский многоголосый (AI)",
     "ai_ldvo": "Любительский двухголосый (AI)",
@@ -355,7 +397,9 @@ def detect_kinozal_quality(media: dict) -> str:
 
     res = ""
     if width > 0 and height > 0:
-        if height >= 2100 or width >= 3800:
+        if height >= 4000 or width >= 7000:
+            res = "4320p"
+        elif height >= 2100 or width >= 3800:
             res = "2160p"
         elif height >= 1400 or width >= 2500:
             res = "1440p"
@@ -363,19 +407,27 @@ def detect_kinozal_quality(media: dict) -> str:
             res = "1080i" if scan == "Interlaced" else "1080p"
         elif height >= 650 or width >= 1200:
             res = "720p"
-        else:
-            res = ""
+        elif height >= 500 or width >= 900:
+            res = "576p"
+        elif height >= 400 or width >= 700:
+            res = "480p"
     else:
-        if "2160" in filename or "4k" in filename:
+        if "4320" in filename or "8k" in filename:
+            res = "4320p"
+        elif "2160" in filename or "4k" in filename:
             res = "2160p"
+        elif "1440" in filename or "2k" in filename:
+            res = "1440p"
         elif "1080" in filename:
             res = "1080i" if "1080i" in filename or scan == "Interlaced" else "1080p"
         elif "720" in filename:
             res = "720p"
-        elif "576" in filename or "480" in filename:
+        elif "576" in filename:
             res = "576p"
+        elif "480" in filename:
+            res = "480p"
 
-    if "remux" in filename and ("bd" in filename or "bluray" in filename):
+    if "remux" in filename:
         return f"Blu-Ray Remux ({res})" if res else "Blu-Ray Remux (1080p)"
     elif "blu-ray" in filename or "bluray" in filename or "bdmv" in filename:
         return f"Blu-Ray ({res})" if res else "Blu-Ray (1080p)"
@@ -390,13 +442,17 @@ def detect_kinozal_quality(media: dict) -> str:
             return "BDRip (HEVC)"
         return "BDRip"
     elif "web-dlrip" in filename or "webdlrip" in filename:
+        if res:
+            return f"WEB-DLRip ({res})"
         return "WEB-DLRip (AVC)" if ("avc" in filename or "AVC" in vcodec) else "WEB-DLRip"
     elif "web-dl" in filename or "webdl" in filename:
         return f"WEB-DL ({res})" if res else "WEB-DL (1080p)"
     elif "webrip" in filename:
         return f"WEBRip ({res})" if res else "WEBRip (1080p)"
     elif "hdtvrip" in filename:
-        return f"HDTVRip ({res})" if res else "HDTVRip"
+        if res:
+            return f"HDTVRip ({res})"
+        return "HDTVRip (AVC)" if ("avc" in filename or "AVC" in vcodec) else "HDTVRip"
     elif "hdtv" in filename:
         return f"HDTV ({res})" if res else "HDTV (1080i)"
     elif "dvd-9" in filename or "dvd9" in filename:
@@ -406,16 +462,19 @@ def detect_kinozal_quality(media: dict) -> str:
     elif "dvdrip" in filename:
         return "DVDRip (AVC)" if ("avc" in filename or "AVC" in vcodec) else "DVDRip"
 
-    if res == "2160p":
-        return "WEB-DL (2160p)"
+    if res in ("2160p", "4320p", "1440p"):
+        return f"WEB-DL ({res})"
     elif res in ("1080p", "1080i"):
         return f"BDRip ({res})"
     elif res == "720p":
         return "BDRip (720p)"
     return "WEB-DL"
 
-def detect_video_features(media: dict) -> list:
-    """Определяет особенности видеоряда: 3D, HEVC, AV1, VP9, SDR, HDR, HDR10+, HLG, 4K, Dolby Vision, Open Matte"""
+def detect_video_features(media: dict, release_opts: dict = None) -> list:
+    """Определяет особенности видеоряда строго по правилам Кинозала (docs/new_kinozal.md):
+       Формат 3D, 8K/4K/2K, HEVC/AV1/VP9, SDR/HDR/HDR10+/HLG, Dolby Vision (DV), Open Matte, Transfer.
+    """
+    opts = release_opts or {}
     features = []
     width = media.get("width", 0) or 0
     height = media.get("height", 0) or 0
@@ -426,71 +485,14 @@ def detect_video_features(media: dict) -> list:
     transfer = (media.get("transfer_characteristics") or "").upper()
     filename = (media.get("filename") or "").lower()
 
-    if width > 0 and height > 0:
-        is_8k = width >= 7600 or height >= 4200
-        is_4k = (width >= 3800 or height >= 2100) and not is_8k
-        is_2k = (width >= 2500 or height >= 1400) and not is_4k and not is_8k
-    else:
-        is_8k = "4320" in filename or "8k" in filename
-        is_4k = "2160" in filename or "4k" in filename
-        is_2k = "1440" in filename and not is_4k
-        is_8k = False
-
-    if is_8k:
-        features.append("8K")
-    elif is_4k:
-        features.append("4K")
-    elif is_2k:
-        features.append("2K")
-
-    # Кодек
-    if "AV1" in codec:
-        features.append("AV1")
-    elif "HEVC" in codec or "H.265" in codec or "HEVC" in comm_name:
-        features.append("HEVC")
-    elif "VP9" in codec:
-        features.append("VP9")
-    elif not codec:
-        if "av1" in filename:
-            features.append("AV1")
-        elif "hevc" in filename or "x265" in filename:
-            features.append("HEVC")
-        elif "vp9" in filename:
-            features.append("VP9")
-
-    # HDR / Dolby Vision / SDR
-    has_hdr = False
-    if "DOLBY VISION" in hdr or "DV" in hdr or ("dovi" in filename and not codec):
-        has_hdr = True
-        if "HDR10+" in hdr:
-            features.append("HDR10+")
-        elif "HDR" in hdr:
-            features.append("HDR")
-        if "P8" in hdr_prof or "PROFILE 8" in hdr_prof:
-            features.append("Dolby Vision P8")
-        elif "P7" in hdr_prof or "PROFILE 7" in hdr_prof:
-            features.append("Dolby Vision P7")
-        elif "TV" in hdr:
-            features.append("Dolby Vision TV")
-        else:
-            features.append("Dolby Vision")
-    elif "HDR10+" in hdr or "SMPTE ST 2094" in hdr:
-        has_hdr = True
-        features.append("HDR10+")
-    elif "HLG" in hdr or "ARIB STD-B67" in transfer:
-        has_hdr = True
-        features.append("HLG")
-    elif "HDR" in hdr or "PQ" in transfer or "SMPTE ST 2084" in transfer:
-        has_hdr = True
-        features.append("HDR")
-    elif is_4k or is_2k or is_8k:
-        features.append("SDR")
-
-    if "open matte" in filename or "open.matte" in filename:
-        features.append("Open Matte")
-
-    if "3d" in filename:
-        if "hsbs" in filename:
+    # 1. Формат 3D (указывается в начале особенностей видеоряда)
+    if "3d" in filename or opts.get("is_3d"):
+        if "2d" in filename and "3d" in filename:
+            if "анаглиф" in filename or "anaglyph" in filename:
+                features.append("2D, 3D (Анаглиф)")
+            else:
+                features.append("2D, 3D")
+        elif "hsbs" in filename:
             features.append("3D (HSBS)")
         elif "hou" in filename:
             features.append("3D (HOU)")
@@ -502,6 +504,93 @@ def detect_video_features(media: dict) -> list:
             features.append("3D (Анаглиф)")
         else:
             features.append("3D")
+
+    # 2. Разрешение (только 8K, 4K, 2K - 1080p/720p здесь не указываются)
+    if width > 0 and height > 0:
+        is_8k = width >= 7600 or height >= 4200
+        is_4k = (width >= 3800 or height >= 2100) and not is_8k
+        is_2k = (width >= 2500 or height >= 1400) and not is_4k and not is_8k
+    else:
+        is_8k = "4320" in filename or "8k" in filename
+        is_4k = ("2160" in filename or "4k" in filename) and not is_8k
+        is_2k = ("1440" in filename or "2k" in filename) and not is_4k and not is_8k
+
+    if is_8k:
+        features.append("8K")
+    elif is_4k:
+        features.append("4K")
+    elif is_2k:
+        features.append("2K")
+
+    # 3. Кодек (HEVC, AV1, VP9)
+    if "AV1" in codec or "av1" in filename:
+        features.append("AV1")
+    elif "HEVC" in codec or "H.265" in codec or "HEVC" in comm_name or "hevc" in filename or "x265" in filename:
+        features.append("HEVC")
+    elif "VP9" in codec or "vp9" in filename:
+        features.append("VP9")
+
+    # 4. Диапазон яркости и Dolby Vision
+    is_dovi = (
+        "DOLBY VISION" in hdr
+        or "DV" in hdr
+        or "dovi" in filename
+        or "dolby vision" in filename
+        or "dv" in filename.split(".")
+    )
+
+    if is_dovi:
+        # Базовый слой HDR / HDR10+
+        if "HDR10+" in hdr or "hdr10+" in filename:
+            features.append("HDR10+")
+        elif (
+            "HDR" in hdr
+            or "SMPTE ST 2086" in hdr
+            or "SMPTE ST 2084" in transfer
+            or "PQ" in transfer
+            or "remux" in filename
+            or "web" in filename
+            or "hdr" in filename
+        ):
+            features.append("HDR")
+
+        # Определение профиля Dolby Vision
+        # Rule: Для раздач Dolby Vision указание профиля обязательно за исключением раздач Blu-Ray и Blu-Ray Remux в папке BDMV
+        is_remux_or_bdmv = ("remux" in filename or "blu-ray" in filename or "bluray" in filename or "bdmv" in filename)
+        is_p8 = bool(re.search(r'(profile\s*8|\bp8\b|08\.|dvhe\.08|dvh1\.08|dovi\.08)', (hdr_prof + " " + hdr + " " + filename).lower()))
+        is_p7 = bool(re.search(r'(profile\s*7|\bp7\b|07\.|dvhe\.07|dvh1\.07|dovi\.07)', (hdr_prof + " " + hdr + " " + filename).lower()))
+        is_tv = "tv" in hdr_prof.lower() or "dv tv" in filename or "dolby vision tv" in filename
+
+        if is_tv:
+            features.append("Dolby Vision TV")
+        elif is_p8:
+            features.append("Dolby Vision P8")
+        elif is_p7 and not is_remux_or_bdmv:
+            features.append("Dolby Vision P7")
+        else:
+            features.append("Dolby Vision")
+    elif "HDR10+" in hdr or "SMPTE ST 2094" in hdr or "hdr10+" in filename:
+        features.append("HDR10+")
+    elif "HLG" in hdr or "ARIB STD-B67" in transfer or "hlg" in filename:
+        features.append("HLG")
+    elif "HDR" in hdr or "PQ" in transfer or "SMPTE ST 2084" in transfer or "hdr10" in filename or "hdr" in filename:
+        features.append("HDR")
+    elif is_4k or is_2k or is_8k:
+        # SDR указывается только для 2K, 4K, 8K раздач с диапазоном яркости SDR
+        features.append("SDR")
+
+    # 5. Open Matte
+    if "open matte" in filename or "open.matte" in filename or opts.get("open_matte"):
+        features.append("Open Matte")
+
+    # 6. Transfer (RUS Transfer, GER Transfer и т.д.)
+    transfer_country = opts.get("transfer_country")
+    if not transfer_country:
+        m_trans = re.search(r'\b(rus|ger|fra|ita|usa|uk|jpn)\s*transfer\b', filename, re.IGNORECASE)
+        if m_trans:
+            transfer_country = m_trans.group(1).upper()
+    if transfer_country:
+        features.append(f"{transfer_country} Transfer")
 
     return features
 
@@ -651,9 +740,40 @@ def format_kinozal_release_audio(track: dict, idx: int, fallback_trans_name: str
     else:
         return f"Аудио {num_str}: {lang} / {desc}"
 
+def has_kinozal_tk(audio_tracks: list, subtitles: list = None, release_opts: dict = None) -> bool:
+    """Проверяет наличие тифлокомментариев (ТК).
+    По правилам Кинозала код ТК выносится в отдельную позицию через слэш:
+    Шаблон: Название / Оригинальное название / Год / Код перевода / ТК / Качество
+    """
+    opts = release_opts or {}
+    if opts.get("has_tk") or opts.get("tk"):
+        return True
+
+    tk_keywords = ["тифло", "тифлокомментар", "audio description", "visual description", "descriptive audio"]
+
+    for t in (audio_tracks or []):
+        if not isinstance(t, dict):
+            continue
+        if t.get("translation_type_key") == "tk":
+            return True
+        title = (t.get("title") or t.get("studio_or_desc") or "").lower()
+        if any(k in title for k in tk_keywords):
+            return True
+
+    for s in (subtitles or []):
+        if not isinstance(s, dict):
+            continue
+        title = (s.get("title") or "").lower()
+        if any(k in title for k in tk_keywords):
+            return True
+
+    return False
+
 def build_kinozal_translation_title(audio_tracks: list, is_domestic: bool, has_subtitles: bool, fallback_code: str = "ПМ") -> str:
-    """Группирует коды перевода для названия раздачи по правилам Кинозала:
+    """Группирует коды перевода для названия раздачи по правилам Кинозала (docs/new_kinozal.md):
        например: 'ДБ, 2 х ПД, 3 х АП (Гаврилов, Живов, Володарский)'
+       или: 'ПМ (Культура, R5), СТ'
+       или: 'РУ'
     """
     if is_domestic:
         return "РУ"
@@ -664,6 +784,7 @@ def build_kinozal_translation_title(audio_tracks: list, is_domestic: bool, has_s
         return code
 
     code_counts = {}
+    code_studios = {}
     author_names = []
     has_russian = False
 
@@ -672,7 +793,14 @@ def build_kinozal_translation_title(audio_tracks: list, is_domestic: bool, has_s
         type_key = t.get("translation_type_key", "mvo")
         desc = (t.get("studio_or_desc") or "").strip()
 
-        if "рус" in lang or type_key in ("dub", "mvo", "dvo", "pvo", "avo", "lmvo", "ldvo", "lvo", "ru"):
+        # Тифлокомментарии выносятся в отдельную позицию / ТК /, не дублируем их внутри кодов
+        if type_key == "tk":
+            continue
+
+        if "рус" in lang or type_key in (
+            "dub", "mvo", "dvo", "pvo", "avo", "lmvo", "ldvo", "lvo", "ru",
+            "ai_dub", "ai_mvo", "ai_ldvo", "ai_lvo", "dub_ts", "funny"
+        ):
             has_russian = True
 
         if type_key == "avo":
@@ -684,13 +812,22 @@ def build_kinozal_translation_title(audio_tracks: list, is_domestic: bool, has_s
             code_counts["АП"] = code_counts.get("АП", 0) + 1
         elif type_key in KZ_CODE_MAP:
             c = KZ_CODE_MAP[type_key]
-            if c not in ("БП", "СТ"):
+            if c not in ("БП", "СТ", "ТК"):
                 code_counts[c] = code_counts.get(c, 0) + 1
+                if desc and desc.lower() not in IGNORED_STUDIO_WORDS:
+                    code_studios.setdefault(c, []).append(desc)
 
     if not has_russian:
         return "БП, СТ" if has_subtitles else "БП"
 
-    order = ["ДБ", "ПМ", "ПД", "ПО", "ЛМ", "ЛД", "ЛО", "АП", "РУ"]
+    order = [
+        "ДБ", "ДБ (TS)", "ПМ", "ПД", "ПО",
+        "ЛМ", "ЛД", "ЛО",
+        "АП",
+        "(Смешной перевод)",
+        "ДБ (AI)", "ЛМ (AI)", "ЛД (AI)", "ЛО (AI)",
+        "РУ", "НК"
+    ]
     result_parts = []
 
     for c in order:
@@ -706,15 +843,23 @@ def build_kinozal_translation_title(audio_tracks: list, is_domestic: bool, has_s
                     result_parts.append(f"АП ({names_str})")
             else:
                 result_parts.append(f"{cnt} х АП" if cnt > 1 else "АП")
+        elif c == "(Смешной перевод)":
+            result_parts.append(c)
         else:
-            if cnt > 1:
-                result_parts.append(f"{cnt} х {c}")
+            studios = code_studios.get(c, [])
+            studios_clean = []
+            for s in studios:
+                if s not in studios_clean:
+                    studios_clean.append(s)
+            studios_str = ", ".join(studios_clean)
+            if studios_str:
+                if cnt > 1:
+                    result_parts.append(f"{cnt} х {c} ({studios_str})")
+                else:
+                    result_parts.append(f"{c} ({studios_str})")
             else:
-                first_studio = audio_tracks[0].get("studio_or_desc", "").strip() if len(audio_tracks) == 1 else ""
-                if first_studio.lower() in IGNORED_STUDIO_WORDS:
-                    first_studio = ""
-                if first_studio and len(audio_tracks) == 1:
-                    result_parts.append(f"{c} ({first_studio})")
+                if cnt > 1:
+                    result_parts.append(f"{cnt} х {c}")
                 else:
                     result_parts.append(c)
 
@@ -819,30 +964,41 @@ def build_kinozal_fields(meta: dict, media: dict, release_opts: dict, uploaded_s
 
     subtitles = release_opts.get("subtitle_tracks") if release_opts.get("subtitle_tracks") is not None else media.get("subtitles", [])
     enabled_subs = [s for s in subtitles if s.get("enabled", True)]
-    has_subtitles = len(enabled_subs) > 0
-    voice_code_full = build_kinozal_translation_title(audio_tracks, is_domestic, has_subtitles, voice_code)
+    has_russian_subs = has_russian_full_subtitles(enabled_subs)
+    voice_code_full = build_kinozal_translation_title(audio_tracks, is_domestic, has_russian_subs, voice_code)
 
     # Особенности видеоряда
-    video_features = detect_video_features(media)
+    video_features = detect_video_features(media, release_opts)
     features_str = ", ".join(video_features) if video_features else ""
 
     # Качество
     quality = detect_kinozal_quality(media)
 
+    # Проверка на тифлокомментарии (ТК)
+    has_tk = has_kinozal_tk(audio_tracks, enabled_subs, release_opts)
+
     # Сериальные метки
     is_series = meta.get("is_series", False)
     season_num = release_opts.get("season", 1)
-    episodes_str = release_opts.get("episodes", "")
-    episodes_count = release_opts.get("episodes_count", 0)
+    episodes_str = str(release_opts.get("episodes") or release_opts.get("episodes_str") or meta.get("episodes") or "").strip()
+    episodes_count = release_opts.get("episodes_count", 0) or meta.get("episodes_count", 0)
 
     title_main_part = title_ru
     if is_series:
         if episodes_str:
-            title_main_part = f"{title_ru} ({season_num} сезон: {episodes_str})"
+            if "сезон" in episodes_str.lower() or "сери" in episodes_str.lower():
+                title_main_part = f"{title_ru} ({episodes_str})"
+            elif season_num and int(season_num) > 1:
+                title_main_part = f"{title_ru} ({season_num} сезон: {episodes_str})"
+            else:
+                title_main_part = f"{title_ru} ({episodes_str})"
         elif episodes_count:
-            title_main_part = f"{title_ru} ({season_num} сезон: 1-{episodes_count} серии из {episodes_count})"
+            if season_num and int(season_num) > 1:
+                title_main_part = f"{title_ru} ({season_num} сезон: 1-{episodes_count} серии из {episodes_count})"
+            else:
+                title_main_part = f"{title_ru} ({episodes_count} серии из {episodes_count})" if episodes_count > 1 else f"{title_ru} (1 серия)"
         else:
-            title_main_part = f"{title_ru} ({season_num} сезон)"
+            title_main_part = f"{title_ru} ({season_num} сезон)" if (season_num and int(season_num) > 1) else title_ru
 
     # Сборка основного заголовка (до 150 символов)
     # Правило: Если русское и оригинальное совпадают (отечественные), оставляем только оригинальное
@@ -855,9 +1011,13 @@ def build_kinozal_fields(meta: dict, media: dict, release_opts: dict, uploaded_s
             title_components.append(title_orig)
 
     if year:
-        title_components.append(year)
+        title_components.append(str(year))
 
     title_components.append(voice_code_full)
+
+    # Тифлокомментарии (ТК) выносятся отдельной позицией через косую черту по правилам Кинозала
+    if has_tk:
+        title_components.append("ТК")
 
     if features_str:
         title_components.append(features_str)

@@ -27,6 +27,10 @@ const TYPE_OPTIONS = [
   { val: "lvo", label: "Любит. одноголосый [ЛО]" },
   { val: "original", label: "Без перевода / Оригинал [БП]" },
   { val: "ru", label: "Русский (оригинал) [РУ]" },
+  { val: "tk", label: "Тифлокомментарии [ТК]" },
+  { val: "dub_ts", label: "Дублированный (TS) [ДБ (TS)]" },
+  { val: "funny", label: "Пародийный [(Смешной перевод)]" },
+  { val: "nk", label: "Не требуется [НК]" },
   { val: "ai_dub", label: "Дубляж AI [ДБ (AI)]" },
   { val: "ai_mvo", label: "Любит. многоголосый AI [ЛМ (AI)]" },
   { val: "ai_ldvo", label: "Любит. двухголосый AI [ЛД (AI)]" },
@@ -267,6 +271,10 @@ export class ReleaseManager {
 
     if (detectedLang !== 'Русский') {
       detectedType = 'original';
+    } else if (title.includes('тифло') || title.includes('audio description') || title.includes('visual description')) {
+      detectedType = 'tk';
+    } else if (title.includes('смешной') || title.includes('пародийн')) {
+      detectedType = 'funny';
     } else if (isDomestic) {
       detectedType = 'ru'; // Для отечественного фильма русская дорожка - оригинал
     } else if (title.includes('дубл') || title.includes('dub')) {

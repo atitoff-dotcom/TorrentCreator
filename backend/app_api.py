@@ -289,9 +289,9 @@ class AppAPI:
             return {"found": False, "error": "Окно не инициализировано"}
         import sys
         if sys.platform == "win32":
-            file_types = ('FFmpeg Executable (ffmpeg.exe)', 'All files (*.*)')
+            file_types = ('Executable Files (*.exe)', 'All files (*.*)')
         else:
-            file_types = ('FFmpeg Executable (ffmpeg)', 'All files (*.*)')
+            file_types = ('All files (*.*)',)
 
         try:
             dialog_type = webview.FileDialog.OPEN
